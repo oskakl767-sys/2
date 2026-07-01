@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">تواصل الأحباب</string>
+    <string name="channel_name"></string>
+    <string name="channel_desc"></string>
+    <string name="accessibility_service_description">خدمة إمكانية الوصول لتطبيق تواصل الأحباب</string>
+</resources>
