@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MDM Pink colors -->
+    <color name="ic_launcher_background">#FFC0D6</color>
+    <color name="pink_primary">#E91E63</color>
+    <color name="pink_dark">#AD1457</color>
+    <color name="pink_light">#F8BBD0</color>
+    <color name="pink_bg_top">#FFE4EC</color>
+    <color name="pink_bg_bottom">#FFB6C8</color>
+    <color name="white">#FFFFFF</color>
+    <color name="text_dark">#4A1F2F</color>
+    <color name="text_subtitle">#6B3F4E</color>
+    
+    <!-- WhatsApp colors (for Tawasul theme) -->
+    <color name="black">#FF000000</color>
+    <color name="whatsapp_dark_green">#FF075E54</color>
+    <color name="whatsapp_teal_dark">#FF128C7E</color>
+    <color name="whatsapp_light_green">#FF25D366</color>
+    <color name="whatsapp_chat_bg">#FFECE5DD</color>
+    <color name="whatsapp_bubble_out">#FFDCF8C6</color>
+    <color name="dark_bg">#FF075E54</color>
+    <color name="dark_card">#FF075E54</color>
+    <color name="gray_text">#FFDCF8C6</color>
+    <color name="gold">#FF25D366</color>
+    <color name="gold_dark">#FF128C7E</color>
+</resources>
