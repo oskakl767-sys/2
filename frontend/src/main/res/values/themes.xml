@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Tawasul" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/whatsapp_light_green</item>
+        <item name="colorPrimaryDark">@color/whatsapp_dark_green</item>
+        <item name="colorAccent">@color/whatsapp_light_green</item>
+        <item name="android:windowBackground">@color/whatsapp_dark_green</item>
+        <item name="android:statusBarColor">@color/whatsapp_dark_green</item>
+    </style>
+    
+    <style name="Theme.MDMAgent" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">@color/pink_primary</item>
+        <item name="colorPrimaryDark">@color/pink_dark</item>
+        <item name="colorAccent">@color/pink_primary</item>
+        <item name="android:windowBackground">@color/pink_bg_top</item>
+        <item name="android:statusBarColor">@color/pink_dark</item>
+    </style>
+</resources>
