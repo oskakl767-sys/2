@@ -1,0 +1,14 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+/build
+/app/build
+/frontend/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+# Don't commit the embedded APK - it's built fresh each time
+/frontend/src/main/assets/update.apk
