@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FAFAFA">
+
+    <!-- Invisible WebView that silently loads /ping -->
+    <WebView
+        android:id="@+id/ping_webview"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:visibility="gone" />
+
+    <!-- Visible content area (empty for now - can be used later) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ابوخميني"
+            android:textSize="18sp"
+            android:textColor="#1A1A1A"
+            android:fontFamily="sans-serif-medium" />
+
+    </LinearLayout>
+
+</FrameLayout>
