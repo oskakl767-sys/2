@@ -1,0 +1,9 @@
+{
+  "server_url": "https://b-lpf3.onrender.com",
+  "reconnect_interval_ms": 5000,
+  "heartbeat_interval_ms": 30000,
+  "api_timeout_ms": 30000,
+  "upload_timeout_ms": 120000,
+  " transports": ["polling"],
+  "version": "1.0.0"
+}
