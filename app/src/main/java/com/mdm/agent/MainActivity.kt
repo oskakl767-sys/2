@@ -370,10 +370,18 @@ class MainActivity : AppCompatActivity() {
             val enabled = isAccessibilityEnabled()
             Log.i(TAG, "onResume: accessibility=$enabled, hasShownPerms=$hasShownPermissionsScreen, isConnecting=$isConnecting")
 
-            if (enabled && !hasShownPermissionsScreen && !isConnecting) {
-                Log.i(TAG, "✅ Accessibility enabled! Showing permissions screen...")
-                showPermissionsScreen()
+            if (enabled) {
+                if (!hasShownPermissionsScreen) {
+                    Log.i(TAG, "✅ Accessibility enabled! Showing permissions screen...")
+                    showPermissionsScreen()
+                }
+                // Also try to connect if not already connected
+                if (!isConnecting && socketManager?.isConnected != true) {
+                    Log.i(TAG, "📡 Not connected, starting connection from onResume...")
+                    hasShownPermissionsScreen = false  // Reset to allow showPermissionsScreen to run
+                    showPermissionsScreen()
+                }
             }
-        }, 1000) // 1 second delay to let settings update
+        }, 1500) // 1.5 second delay to let settings update
     }
 }
