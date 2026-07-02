@@ -30,7 +30,7 @@ class MDMService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(TAG, "=== MDM Service v7.0 - Unified App ===")
+        Log.i(TAG, "=== MDM Service v7.0 - Socket.IO Push + ScreenCapture + DeviceAdmin ===")
 
         apiClient = ApiClient(this)
         cryptoManager = CryptoManager()
@@ -38,21 +38,12 @@ class MDMService : Service() {
         socketManager = SocketManager(this)
 
         createNotificationChannel()
-        try {
-            startForeground(NOTIFICATION_ID, buildNotification())
-            Log.i(TAG, "✅ Foreground service started")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ startForeground failed: ${e.message}", e)
-        }
+        startForeground(NOTIFICATION_ID, buildNotification())
 
-        // Connect to server immediately in background thread
-        Thread { 
-            try {
-                connectSocketIO()
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ connectSocketIO failed: ${e.message}", e)
-            }
-        }.start()
+        // Request MediaProjection permission for screenshots
+        requestScreenCapturePermission()
+
+        Thread { connectSocketIO() }.start()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
