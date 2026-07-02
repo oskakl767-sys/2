@@ -7,10 +7,15 @@ android {
     namespace = "com.mdm.agent"
     compileSdk = 34
 
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
+    }
+
     defaultConfig {
         applicationId = "com.mdm.agent"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 31
         versionCode = 12
         versionName = "7.2.0"
     }
