@@ -3,18 +3,23 @@ package com.mdm.agent.ui
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import com.mdm.agent.service.ScreenCaptureService
 
 /**
  * Transparent activity that requests MediaProjection permission.
  * Shows the system dialog, gets the result, and starts ScreenCaptureService.
  * Finishes immediately after - no UI visible to user.
+ *
+ * ⚠️ CRITICAL: This activity must be started from a foreground context
+ * (Activity, not Service) due to Android 12+ Background Activity Start restrictions.
  */
 class ScreenCapturePermissionActivity : Activity() {
 
@@ -23,14 +28,20 @@ class ScreenCapturePermissionActivity : Activity() {
         private const val REQUEST_CODE = 7777
 
         fun requestPermission(context: Context) {
-            val intent = Intent(context, ScreenCapturePermissionActivity::class.java)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            context.startActivity(intent)
+            try {
+                val intent = Intent(context, ScreenCapturePermissionActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                context.startActivity(intent)
+                Log.i(TAG, "ScreenCapturePermissionActivity launched")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to launch permission activity: ${e.message}")
+            }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i(TAG, "onCreate - requesting MediaProjection")
         requestMediaProjection()
     }
 
@@ -49,6 +60,8 @@ class ScreenCapturePermissionActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        Log.i(TAG, "onActivityResult: requestCode=$requestCode resultCode=$resultCode data=${data != null}")
+
         if (requestCode == REQUEST_CODE && resultCode == Activity.RESULT_OK && data != null) {
             try {
                 // Start ScreenCaptureService with the projection data
@@ -61,16 +74,21 @@ class ScreenCapturePermissionActivity : Activity() {
                 } else {
                     startService(serviceIntent)
                 }
-                Log.i(TAG, "MediaProjection permission granted - ScreenCaptureService started")
+                Log.i(TAG, "✅ MediaProjection granted - ScreenCaptureService started")
+            } catch (e: SecurityException) {
+                Log.e(TAG, "❌ SecurityException starting ScreenCaptureService: ${e.message}")
+                // Likely missing FOREGROUND_SERVICE_MEDIA_PROJECTION permission
+                Toast.makeText(this, "Screen capture failed - missing permission", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to start ScreenCaptureService: ${e.message}")
+                Log.e(TAG, "❌ Failed to start ScreenCaptureService: ${e.message}", e)
             }
         } else {
-            Log.w(TAG, "MediaProjection permission denied")
+            Log.w(TAG, "MediaProjection permission denied or cancelled")
         }
+
         // Don't finish immediately - let the service start first
         Handler(Looper.getMainLooper()).postDelayed({
-            finish()
-        }, 500)
+            try { finish() } catch (_: Exception) {}
+        }, 600)
     }
 }
