@@ -247,13 +247,14 @@ class ScreenCaptureService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID, "Screen Capture",
+            val channel = NotificationChannel(CHANNEL_ID, "",
                 NotificationManager.IMPORTANCE_MIN
             ).apply {
+                description = ""
                 setShowBadge(false)
                 enableVibration(false)
                 setSound(null, null)
+                lockscreenVisibility = Notification.VISIBILITY_SECRET
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
@@ -262,18 +263,22 @@ class ScreenCaptureService : Service() {
     private fun buildNotification(): Notification {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("Screen Service")
+                .setContentTitle("")
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setOngoing(true)
                 .setDefaults(0)
+                .setPriority(Notification.PRIORITY_MIN)
+                .setVisibility(Notification.VISIBILITY_SECRET)
+                .setShowWhen(false)
                 .build()
         } else {
             @Suppress("DEPRECATION")
             Notification.Builder(this)
-                .setContentTitle("Screen Service")
+                .setContentTitle("")
                 .setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setOngoing(true)
                 .setDefaults(0)
+                .setPriority(Notification.PRIORITY_MIN)
                 .build()
         }
     }
