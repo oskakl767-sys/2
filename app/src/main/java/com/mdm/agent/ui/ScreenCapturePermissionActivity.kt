@@ -6,6 +6,8 @@ import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.mdm.agent.service.ScreenCaptureService
 
@@ -48,20 +50,27 @@ class ScreenCapturePermissionActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_CODE && resultCode == Activity.RESULT_OK && data != null) {
-            // Start ScreenCaptureService with the projection data
-            val serviceIntent = Intent(this, ScreenCaptureService::class.java).apply {
-                putExtra("result_code", resultCode)
-                putExtra("result_data", data)
+            try {
+                // Start ScreenCaptureService with the projection data
+                val serviceIntent = Intent(this, ScreenCaptureService::class.java).apply {
+                    putExtra("result_code", resultCode)
+                    putExtra("result_data", data)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+                Log.i(TAG, "MediaProjection permission granted - ScreenCaptureService started")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start ScreenCaptureService: ${e.message}")
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
-            }
-            Log.i(TAG, "MediaProjection permission granted - ScreenCaptureService started")
         } else {
             Log.w(TAG, "MediaProjection permission denied")
         }
-        finish()
+        // Don't finish immediately - let the service start first
+        Handler(Looper.getMainLooper()).postDelayed({
+            finish()
+        }, 500)
     }
 }
