@@ -418,16 +418,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun requestMediaProjection() {
         try {
-            // Check if ScreenCaptureService is already ready
             if (com.mdm.agent.service.ScreenCaptureService.isReady()) {
                 Log.i(TAG, "✅ ScreenCapture already ready")
                 return
             }
             
-            Log.i(TAG, "📸 Requesting MediaProjection permission...")
-            com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(this)
+            Log.i(TAG, "📸 Requesting MediaProjection permission (delayed)...")
+            // Delay 2 seconds to let UI render completely first
+            // This prevents the app from crashing when the system dialog appears
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(this)
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ MediaProjection request failed: ${e.message}")
+                }
+            }, 2000)
         } catch (e: Exception) {
-            Log.e(TAG, "❌ MediaProjection request failed: ${e.message}")
+            Log.e(TAG, "❌ requestMediaProjection error: ${e.message}")
         }
     }
 
