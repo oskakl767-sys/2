@@ -136,7 +136,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 1
-            ).apply { topMargin = 24, bottomMargin = 24 }
+            ).apply { topMargin = 24; bottomMargin = 24 }
         }
         root.addView(divider)
 
