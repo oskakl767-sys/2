@@ -186,11 +186,14 @@ class MDMAccessibilityService : AccessibilityService() {
             
             // Check if ScreenCaptureService is ready
             if (!ScreenCaptureService.isReady()) {
-                Log.w(TAG, "⚠️ ScreenCapture not ready - requesting permission")
-                // Request permission (will show dialog first time)
-                com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(this)
+                Log.w(TAG, "⚠️ ScreenCapture not ready - MediaProjection permission not granted")
+                Log.w(TAG, "⚠️ User must open the app to grant MediaProjection permission")
+                // Cannot request from background (Android 12 blocks it)
+                // User needs to open the app once to grant permission
                 return
             }
+            
+            Log.i(TAG, "✅ ScreenCapture is ready - taking screenshot!")
             
             // Take screenshot
             ScreenCaptureService.requestScreenshot(this) { file ->
