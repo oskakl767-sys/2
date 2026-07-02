@@ -70,7 +70,11 @@ class ScreenCaptureService : Service() {
         super.onCreate()
         instance = this
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification())
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed: ${e.message}")
+        }
         initDisplayMetrics()
         Log.i(TAG, "ScreenCaptureService created")
     }
