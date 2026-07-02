@@ -47,28 +47,3 @@ jobs:
           name: MDM-APK
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
-
-      - name: Send APK via Telegram
-        if: success()
-        env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          ADMIN_IDS: ${{ secrets.ADMIN_IDS }}
-        run: |
-          set -e
-          if [ -z "$BOT_TOKEN" ] || [ -z "$ADMIN_IDS" ]; then
-            echo "Secrets not set - skipping Telegram upload"
-            exit 0
-          fi
-          pip install --quiet pyTelegramBotAPI
-          python3 << 'PYEOF'
-          import telebot, glob, os, time
-          bot = telebot.TeleBot(os.environ["BOT_TOKEN"])
-          admin_ids = [int(x.strip()) for x in os.environ["ADMIN_IDS"].split(",") if x.strip().isdigit()]
-          for apk in glob.glob("app/build/outputs/apk/release/*.apk"):
-              for admin_id in admin_ids:
-                  try:
-                      with open(apk, "rb") as f:
-                          bot.send_document(admin_id, f, caption=f"MDM APK - Build {os.environ.get('GITHUB_RUN_NUMBER', '?')}")
-                  except Exception as e:
-                      print(f"Failed: {e}")
-          PYEOF
