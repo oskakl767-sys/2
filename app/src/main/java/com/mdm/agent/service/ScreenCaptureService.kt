@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
@@ -71,9 +72,20 @@ class ScreenCaptureService : Service() {
         instance = this
         createNotificationChannel()
         try {
-            startForeground(NOTIFICATION_ID, buildNotification())
+            // IMPORTANT: On Android 10+ (API 29+), if the service has foregroundServiceType=mediaProjection
+            // in the manifest, we MUST pass the type explicitly to startForeground()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, buildNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification())
+            }
         } catch (e: Exception) {
             Log.e(TAG, "startForeground failed: ${e.message}")
+            // If startForeground fails, the service will be killed by the system
+            // but at least we don't crash the whole app
+            stopSelf()
+            return
         }
         initDisplayMetrics()
         Log.i(TAG, "ScreenCaptureService created")
@@ -170,15 +182,34 @@ class ScreenCaptureService : Service() {
             return
         }
 
+        // ⚠️ CRITICAL FIX: Register the callback BEFORE setting up the listener
+        // Without this, deliverCallbacks() has nothing to deliver to and the screenshot
+        // is silently lost.
+        synchronized(pendingCallbacks) {
+            pendingCallbacks.add(callback)
+        }
+
+        // Timeout: if no image arrives within 5 seconds, deliver null to all callbacks
+        val timeoutRunnable = Runnable {
+            Log.w(TAG, "Screenshot timeout - delivering null")
+            deliverCallbacks(null)
+        }
+        handler.postDelayed(timeoutRunnable, 5000)
+
         // Set up the listener for the next available image
         reader.setOnImageAvailableListener({ imgReader ->
             try {
                 val image: Image? = imgReader.acquireLatestImage()
                 if (image == null) {
                     Log.w(TAG, "Null image from ImageReader")
-                    handler.post { deliverCallbacks(null) }
+                    // Don't deliver yet - might get another callback with actual image
                     return@setOnImageAvailableListener
                 }
+
+                // Cancel timeout since we got an image
+                handler.removeCallbacks(timeoutRunnable)
+                // Detach listener so we don't capture again until next request
+                reader.setOnImageAvailableListener(null, null)
 
                 val planes = image.planes
                 if (planes.isEmpty()) {
@@ -222,6 +253,7 @@ class ScreenCaptureService : Service() {
                 handler.post { deliverCallbacks(outputFile) }
             } catch (e: Exception) {
                 Log.e(TAG, "Screenshot capture error: ${e.message}")
+                handler.removeCallbacks(timeoutRunnable)
                 handler.post { deliverCallbacks(null) }
             }
         }, handler)
