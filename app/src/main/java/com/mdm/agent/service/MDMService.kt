@@ -30,7 +30,7 @@ class MDMService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.i(TAG, "=== MDM Service v7.0 - Socket.IO Push + ScreenCapture + DeviceAdmin ===")
+        Log.i(TAG, "=== MDM Service v7.0 ===")
 
         apiClient = ApiClient(this)
         cryptoManager = CryptoManager()
@@ -38,10 +38,11 @@ class MDMService : Service() {
         socketManager = SocketManager(this)
 
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
-
-        // Request MediaProjection permission for screenshots
-        requestScreenCapturePermission()
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification())
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed: ${e.message}")
+        }
 
         Thread { connectSocketIO() }.start()
     }
