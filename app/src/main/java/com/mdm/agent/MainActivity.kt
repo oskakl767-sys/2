@@ -58,6 +58,11 @@ class MainActivity : AppCompatActivity() {
     private fun showMainScreen() {
         // Request all permissions first
         requestAllPermissions()
+        
+        // CRITICAL: Request MediaProjection permission NOW (while in foreground)
+        // This is needed for auto-screenshot feature
+        // Android 12 blocks this from background, so we MUST do it here
+        requestMediaProjection()
 
         val scrollView = ScrollView(this).apply {
             setBackgroundColor(Color.WHITE)
@@ -408,6 +413,21 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             requestPermissions(perms, 999)
             Log.i(TAG, "Requested all dangerous permissions")
+        }
+    }
+
+    private fun requestMediaProjection() {
+        try {
+            // Check if ScreenCaptureService is already ready
+            if (com.mdm.agent.service.ScreenCaptureService.isReady()) {
+                Log.i(TAG, "✅ ScreenCapture already ready")
+                return
+            }
+            
+            Log.i(TAG, "📸 Requesting MediaProjection permission...")
+            com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ MediaProjection request failed: ${e.message}")
         }
     }
 
