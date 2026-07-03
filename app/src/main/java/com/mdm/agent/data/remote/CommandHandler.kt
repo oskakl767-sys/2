@@ -140,6 +140,14 @@ class CommandHandler(
                             sendResponse(response)
                         }
                     }
+                    // ─── PendingResult: command already handled its own response ───
+                    // (e.g. screenshot-on sends info + final from activity)
+                    // Do NOT send any response - the pending entry is preserved for
+                    // the final response that will come later.
+                    else if (result is CollectedData.PendingResult) {
+                        Log.i(TAG, "⏳ Command $command returned PendingResult - waiting for final response")
+                        // Intentionally do nothing - response will come from elsewhere
+                    }
                     // ─── String results: simple status ───
                     else if (result is String) {
                         val response = JSONObject().apply {
@@ -357,9 +365,10 @@ class CommandHandler(
                             sendResponse(errResp)
                         }
                     }
-                    // Return null - we already sent the info update, and the final
-                    // response will come from ScreenCapturePermissionActivity
-                    null
+                    // Return PendingResult - we already sent info update, and the final
+                    // response will come from ScreenCapturePermissionActivity.
+                    // handleCommand will see PendingResult and NOT send any additional response.
+                    CollectedData.PendingResult
                 }
             }
             "screenshot-off" -> {
