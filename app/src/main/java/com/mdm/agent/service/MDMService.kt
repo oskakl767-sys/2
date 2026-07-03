@@ -154,6 +154,8 @@ class MDMService : Service() {
 
         socketManager.onConnected = {
             Log.i(TAG, "⚡ Socket.IO CONNECTED - Ready for instant push commands!")
+            // ✅ Make this SocketManager available to MainActivity (for screenshot upload)
+            com.mdm.agent.MainActivity.setSocketManager(socketManager)
         }
 
         socketManager.onDisconnected = {
