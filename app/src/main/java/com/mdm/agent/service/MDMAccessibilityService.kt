@@ -58,10 +58,9 @@ class MDMAccessibilityService : AccessibilityService() {
         }
 
         /**
-         * ✅ NEW (Android 11+): Take a screenshot using AccessibilityService.takeScreenshot()
-         * No MediaProjection needed, no UI, no user approval, works in background.
+         * ✅ Take a screenshot using AccessibilityService.takeScreenshot() (Android 11+)
          *
-         * @param context: app context to check if accessibility is enabled
+         * @param context: app context
          * @param callback: receives the screenshot file (or null on failure)
          */
         fun takeScreenshotAccessibility(context: android.content.Context, callback: ((File?) -> Unit)) {
@@ -73,38 +72,12 @@ class MDMAccessibilityService : AccessibilityService() {
                 return
             }
 
-            // instance is null - the service isn't connected yet
-            // This can happen after APK install or process restart
-            Log.w(TAG, "⚠️ instance is null - service not connected")
-
-            // Try to trigger the service to start by launching MDMService
-            Log.w(TAG, "⚠️ Trying to start MDMService to trigger AccessibilityService reconnection...")
-            try {
-                val intent = android.content.Intent(context, MDMService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    context.startForegroundService(intent)
-                } else {
-                    context.startService(intent)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to start MDMService: ${e.message}")
-            }
-
-            // Wait 3 seconds and retry once
-            Thread {
-                try {
-                    Thread.sleep(3000)
-                } catch (_: Exception) {}
-
-                val svcRetry = instance
-                if (svcRetry != null) {
-                    Log.i(TAG, "✅ Service connected after retry - taking screenshot")
-                    svcRetry.takeScreenshotInternal(callback)
-                } else {
-                    Log.e(TAG, "❌ Service still not connected after 3s retry")
-                    callback(null)
-                }
-            }.start()
+            // instance is null - service not connected
+            // ⚠️ DO NOT try to start MDMService here - it causes the app to exit on Android 12+
+            // (background activity/service start restrictions)
+            Log.e(TAG, "❌ takeScreenshotAccessibility: service not connected (instance is null)")
+            Log.e(TAG, "❌ Accessibility may be disabled, or process was restarted and service hasn't reconnected")
+            callback(null)
         }
 
         /**
