@@ -78,17 +78,6 @@ class MDMService : Service() {
         } catch (_: Exception) {}
     }
 
-    private fun requestScreenCapturePermission() {
-        // Request MediaProjection permission on service start
-        // This will show a system dialog - needed for screenshot feature
-        try {
-            ScreenCapturePermissionActivity.requestPermission(this)
-            Log.i(TAG, "Screen capture permission requested")
-        } catch (e: Exception) {
-            Log.w(TAG, "Screen capture permission request failed: ${e.message}")
-        }
-    }
-
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(CHANNEL_ID, getString(R.string.channel_name),
