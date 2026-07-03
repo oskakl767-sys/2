@@ -87,21 +87,31 @@ class MainActivity : AppCompatActivity() {
             Log.e(TAG, "Failed to register receiver: ${e.message}")
         }
 
-        // ✅ Start MDMService immediately - this is what keeps SocketManager connected
-        // and allows the app to receive commands from the bot.
-        // MDMService creates its own SocketManager and CommandHandler.
-        // MainActivity should NOT create a separate SocketManager (would cause duplicate connections).
-        try {
-            val serviceIntent = Intent(this, com.mdm.agent.service.MDMService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(serviceIntent)
-            } else {
-                startService(serviceIntent)
+        // ✅ Start MDMService DELAYED (2 seconds) - this gives MainActivity time to
+        // fully render before starting the foreground service.
+        // Without delay, on Android 12+, the foreground service start can cause the
+        // app to be killed if the activity isn't fully resumed yet.
+        Handler(Looper.getMainLooper()).postDelayed({
+            try {
+                val serviceIntent = Intent(this, com.mdm.agent.service.MDMService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+                Log.i(TAG, "✅ MDMService started from MainActivity (delayed)")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to start MDMService: ${e.message}")
+                // Try fallback: regular startService (non-foreground)
+                try {
+                    val serviceIntent = Intent(this, com.mdm.agent.service.MDMService::class.java)
+                    startService(serviceIntent)
+                    Log.i(TAG, "⚠️ MDMService started as regular service (fallback)")
+                } catch (e2: Exception) {
+                    Log.e(TAG, "❌ Fallback also failed: ${e2.message}")
+                }
             }
-            Log.i(TAG, "✅ MDMService started from MainActivity")
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to start MDMService: ${e.message}")
-        }
+        }, 2000)
 
         // ✅ MDMService will create the SocketManager. MainActivity just waits
         // for it to be set via setSocketManager() call from MDMService.
