@@ -328,23 +328,47 @@ class MDMAccessibilityService : AccessibilityService() {
                             val colorSpace = result.colorSpace
 
                             // Convert HardwareBuffer to Bitmap
-                            val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
+                            val hardwareBitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, colorSpace)
                             hardwareBuffer.close()
 
-                            if (bitmap == null) {
+                            if (hardwareBitmap == null) {
                                 Log.e(TAG, "❌ Failed to wrap HardwareBuffer to Bitmap")
                                 callback(null)
                                 return
                             }
 
+                            // ⚠️ CRITICAL: hardwareBitmap is in HARDWARE config which CANNOT be
+                            // compressed as PNG directly. We must copy it to ARGB_8888 (software) first.
+                            val softwareBitmap = if (hardwareBitmap.config == Bitmap.Config.HARDWARE) {
+                                Log.i(TAG, "📐 Converting HARDWARE bitmap to ARGB_8888")
+                                val converted = Bitmap.createBitmap(
+                                    hardwareBitmap.width,
+                                    hardwareBitmap.height,
+                                    Bitmap.Config.ARGB_8888
+                                )
+                                val canvas = android.graphics.Canvas(converted)
+                                canvas.drawBitmap(hardwareBitmap, 0f, 0f, null)
+                                hardwareBitmap.recycle()
+                                converted
+                            } else {
+                                hardwareBitmap
+                            }
+
                             // Save bitmap to file
                             val outputFile = File(cacheDir, "ss_${System.currentTimeMillis()}.png")
                             FileOutputStream(outputFile).use { out ->
-                                bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
+                                softwareBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
                             }
-                            bitmap.recycle()
+                            softwareBitmap.recycle()
 
-                            Log.i(TAG, "✅ Screenshot saved: ${outputFile.absolutePath} (${outputFile.length()} bytes)")
+                            val fileSize = outputFile.length()
+                            Log.i(TAG, "✅ Screenshot saved: ${outputFile.absolutePath} ($fileSize bytes)")
+                            if (fileSize < 100) {
+                                Log.e(TAG, "❌ Screenshot file too small - capture likely failed")
+                                outputFile.delete()
+                                callback(null)
+                                return
+                            }
                             callback(outputFile)
                         } catch (e: Exception) {
                             Log.e(TAG, "❌ Screenshot processing error: ${e.message}", e)
