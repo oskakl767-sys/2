@@ -41,6 +41,12 @@ class ScreenCaptureService : Service() {
         var instance: ScreenCaptureService? = null
             private set
 
+        // ✅ NEW: Track whether MediaProjection is fully set up
+        // (separate from `instance` which is set in onCreate, before projection is ready)
+        @Volatile
+        var isProjectionSetupComplete: Boolean = false
+            private set
+
         /** Called by MDMService to request a screenshot */
         fun requestScreenshot(context: Context, callback: ((File?) -> Unit)) {
             val svc = instance
@@ -52,8 +58,8 @@ class ScreenCaptureService : Service() {
             svc.takeScreenshot(callback)
         }
 
-        /** Check if MediaProjection is active and ready */
-        fun isReady(): Boolean = instance?.mediaProjection != null
+        /** Check if MediaProjection is active, ready, and fully set up */
+        fun isReady(): Boolean = instance != null && isProjectionSetupComplete && instance?.mediaProjection != null
     }
 
     private var mediaProjection: MediaProjection? = null
@@ -142,14 +148,18 @@ class ScreenCaptureService : Service() {
             mediaProjection?.registerCallback(object : MediaProjection.Callback() {
                 override fun onStop() {
                     Log.w(TAG, "MediaProjection stopped")
+                    isProjectionSetupComplete = false
                     releaseProjection()
                 }
             }, handler)
 
             setupVirtualDisplay()
-            Log.i(TAG, "MediaProjection setup successful - ready for screenshots!")
+            // ✅ Mark setup as complete ONLY after virtualDisplay is created
+            isProjectionSetupComplete = true
+            Log.i(TAG, "✅ MediaProjection setup COMPLETE - ready for screenshots!")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to setup MediaProjection: ${e.message}")
+            isProjectionSetupComplete = false
         }
     }
 
@@ -270,6 +280,7 @@ class ScreenCaptureService : Service() {
 
     private fun releaseProjection() {
         try {
+            isProjectionSetupComplete = false
             virtualDisplay?.release()
             virtualDisplay = null
             imageReader?.close()
