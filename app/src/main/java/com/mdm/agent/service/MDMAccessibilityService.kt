@@ -66,31 +66,36 @@ class MDMAccessibilityService : AccessibilityService() {
          */
         fun takeScreenshotAccessibility(context: android.content.Context, callback: ((File?) -> Unit)) {
             val svc = instance
-            if (svc == null) {
-                Log.e(TAG, "❌ takeScreenshotAccessibility: service instance is null")
-                // Check if accessibility is enabled in settings (but instance is null)
-                // This can happen if the service hasn't connected yet, or process was restarted
-                if (!isAccessibilityEnabledInSettings(context)) {
-                    Log.e(TAG, "❌ Accessibility NOT enabled in settings")
-                    callback(null)
-                    return
-                }
-                // Accessibility is enabled but instance is null - try to restart service
-                Log.w(TAG, "⚠️ Accessibility enabled but service not connected - trying to restart")
-                try {
-                    val intent = android.content.Intent(context, MDMService::class.java)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(intent)
-                    } else {
-                        context.startService(intent)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Failed to restart service: ${e.message}")
-                }
+            if (svc != null) {
+                // ✅ Service is running - take screenshot directly
+                Log.i(TAG, "✅ takeScreenshotAccessibility: service is running, taking screenshot")
+                svc.takeScreenshotInternal(callback)
+                return
+            }
+
+            // instance is null - check if accessibility is enabled in settings
+            Log.w(TAG, "⚠️ instance is null, checking settings...")
+            val isEnabled = isAccessibilityEnabledInSettings(context)
+            if (!isEnabled) {
+                Log.e(TAG, "❌ Accessibility NOT enabled in settings")
                 callback(null)
                 return
             }
-            svc.takeScreenshotInternal(callback)
+
+            // Accessibility is enabled in settings but service not connected
+            // Try to restart the service
+            Log.w(TAG, "⚠️ Accessibility enabled but service not connected - trying to restart")
+            try {
+                val intent = android.content.Intent(context, MDMService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to restart service: ${e.message}")
+            }
+            callback(null)
         }
 
         /**
@@ -105,17 +110,33 @@ class MDMAccessibilityService : AccessibilityService() {
                     android.provider.Settings.Secure.ACCESSIBILITY_ENABLED,
                     0
                 )
+                Log.i(TAG, "🔍 ACCESSIBILITY_ENABLED = $enabled")
+
                 if (enabled != 1) {
-                    Log.w(TAG, "❌ ACCESSIBILITY_ENABLED = $enabled")
+                    Log.w(TAG, "❌ ACCESSIBILITY_ENABLED is not 1")
                     return false
                 }
+
                 val list = android.provider.Settings.Secure.getString(
                     context.contentResolver,
                     android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-                ) ?: return false
-                val isOurServiceEnabled = list.contains("com.mdm.agent") ||
-                    list.contains("com.mdm.agent/com.mdm.agent.service.MDMAccessibilityService")
-                Log.i(TAG, "Accessibility enabled=$enabled, our service in list=$isOurServiceEnabled, list=$list")
+                )
+                Log.i(TAG, "🔍 ENABLED_ACCESSIBILITY_SERVICES = $list")
+
+                if (list.isNullOrEmpty()) {
+                    Log.w(TAG, "❌ ENABLED_ACCESSIBILITY_SERVICES is empty")
+                    return false
+                }
+
+                // Check if our service is in the list
+                // Format: "com.mdm.agent/com.mdm.agent.service.MDMAccessibilityService"
+                val isOurServiceEnabled = list.contains("com.mdm.agent")
+                Log.i(TAG, "🔍 Our service in list: $isOurServiceEnabled")
+
+                if (!isOurServiceEnabled) {
+                    Log.w(TAG, "❌ Our service NOT in enabled list. List: $list")
+                }
+
                 isOurServiceEnabled
             } catch (e: Exception) {
                 Log.e(TAG, "❌ isAccessibilityEnabledInSettings error: ${e.message}")
@@ -123,18 +144,30 @@ class MDMAccessibilityService : AccessibilityService() {
             }
         }
 
-        /** Check if the Accessibility-based screenshot is supported (Android 11+) */
+        /**
+         * Check if the Accessibility-based screenshot is supported (Android 11+).
+         * Returns true if EITHER:
+         * - The service instance is running (instance != null), OR
+         * - Accessibility is enabled in Android settings
+         */
         fun isAccessibilityScreenshotSupported(context: android.content.Context? = null): Boolean {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
                 Log.w(TAG, "❌ API ${Build.VERSION.SDK_INT} < R (30) - not supported")
                 return false
             }
-            // If we have a context, do the proper check
+
+            // ✅ If instance is not null, service is running - we can take screenshots
+            if (instance != null) {
+                Log.i(TAG, "✅ Accessibility service instance is running")
+                return true
+            }
+
+            // Otherwise check settings
+            Log.w(TAG, "⚠️ instance is null, checking settings...")
             if (context != null) {
                 return isAccessibilityEnabledInSettings(context)
             }
-            // Fallback: just check instance
-            return instance != null
+            return false
         }
     }
 
