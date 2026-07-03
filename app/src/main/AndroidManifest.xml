@@ -78,6 +78,8 @@
         <activity
             android:name=".ui.ScreenCapturePermissionActivity"
             android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <activity
