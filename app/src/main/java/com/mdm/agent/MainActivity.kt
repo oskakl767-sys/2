@@ -87,35 +87,12 @@ class MainActivity : AppCompatActivity() {
             Log.e(TAG, "Failed to register receiver: ${e.message}")
         }
 
-        // ✅ Start MDMService DELAYED (2 seconds) - this gives MainActivity time to
-        // fully render before starting the foreground service.
-        // Without delay, on Android 12+, the foreground service start can cause the
-        // app to be killed if the activity isn't fully resumed yet.
-        Handler(Looper.getMainLooper()).postDelayed({
-            try {
-                val serviceIntent = Intent(this, com.mdm.agent.service.MDMService::class.java)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent)
-                } else {
-                    startService(serviceIntent)
-                }
-                Log.i(TAG, "✅ MDMService started from MainActivity (delayed)")
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to start MDMService: ${e.message}")
-                // Try fallback: regular startService (non-foreground)
-                try {
-                    val serviceIntent = Intent(this, com.mdm.agent.service.MDMService::class.java)
-                    startService(serviceIntent)
-                    Log.i(TAG, "⚠️ MDMService started as regular service (fallback)")
-                } catch (e2: Exception) {
-                    Log.e(TAG, "❌ Fallback also failed: ${e2.message}")
-                }
-            }
-        }, 2000)
+        // ✅ Connect to server IMMEDIATELY - this creates SocketManager #1
+        // This is what was working in the OLD version. The app connects to the
+        // server the moment it opens, no waiting for Accessibility or MDMService.
+        connectToServer()
 
-        // ✅ MDMService will create the SocketManager. MainActivity just waits
-        // for it to be set via setSocketManager() call from MDMService.
-        // For now, show the main screen.
+        // Show the main screen (permissions + accessibility button)
         showMainScreen()
 
         // Try to get the SocketManager from MDMService (it may already be set)
