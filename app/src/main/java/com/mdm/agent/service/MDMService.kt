@@ -2,6 +2,7 @@ package com.mdm.agent.service
 
 import android.app.*
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -10,7 +11,6 @@ import android.util.Log
 import com.mdm.agent.R
 import com.mdm.agent.data.remote.*
 import com.mdm.agent.util.DeviceUtils
-import com.mdm.agent.ui.ScreenCapturePermissionActivity
 
 class MDMService : Service() {
 
@@ -39,9 +39,19 @@ class MDMService : Service() {
 
         createNotificationChannel()
         try {
-            startForeground(NOTIFICATION_ID, buildNotification())
+            // ✅ On Android 14+ (API 34+), must specify foregroundServiceType in startForeground()
+            // On Android 10-13, just startForeground() with notification is fine
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, buildNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification())
+            }
+            Log.i(TAG, "✅ startForeground succeeded")
         } catch (e: Exception) {
-            Log.e(TAG, "startForeground failed: ${e.message}")
+            Log.e(TAG, "❌ startForeground failed: ${e.message}")
+            // Don't stopSelf() - try to continue without foreground
+            // The service may still work for Socket.IO connection
         }
 
         Thread { connectSocketIO() }.start()
