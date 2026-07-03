@@ -1,6 +1,7 @@
 package com.mdm.agent.data.remote
 
 import android.content.Context
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -342,32 +343,38 @@ class CommandHandler(
                 } else {
                     Log.i(TAG, "📸 screenshot-on: requesting MediaProjection permission from user (one-time)")
                     // ⚠️ Send "info" status FIRST (does NOT consume pending on server)
-                    // The final success/error will be sent by ScreenCapturePermissionActivity
                     sendInfoUpdate("screenshot-on",
                         "⏳ تم إرسال طلب الموافقة على الهاتف - في انتظار موافقة المستخدم",
                         deviceId)
 
+                    // ✅ Send broadcast to MainActivity - MainActivity will show the permission
+                    // dialog from ITS OWN context (foreground activity). This is the ONLY way
+                    // to ensure the dialog appears OVER the app (not over home screen).
                     Handler(Looper.getMainLooper()).post {
                         try {
-                            android.widget.Toast.makeText(context,
-                                "يُرجى الموافقة على لقطة الشاشة لتفعيل الميزة",
-                                android.widget.Toast.LENGTH_LONG).show()
-                            com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(context)
+                            val intent = Intent("com.mdm.agent.REQUEST_SCREENSHOT_PERMISSION")
+                            intent.setPackage(context.packageName)
+                            context.sendBroadcast(intent)
+                            Log.i(TAG, "📡 Sent broadcast to request screenshot permission")
                         } catch (e: Exception) {
-                            Log.e(TAG, "❌ Failed to request MediaProjection: ${e.message}")
-                            // Send error response (this WILL consume pending)
-                            val errResp = JSONObject().apply {
-                                put("command", "screenshot-on")
-                                put("status", "error")
-                                put("data", "❌ فشل إرسال طلب الموافقة: ${e.message}")
-                                put("device_id", deviceId)
+                            Log.e(TAG, "❌ Failed to send broadcast: ${e.message}")
+                            // Fallback: try direct launch
+                            try {
+                                com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(context)
+                            } catch (e2: Exception) {
+                                Log.e(TAG, "❌ Fallback also failed: ${e2.message}")
+                                val errResp = JSONObject().apply {
+                                    put("command", "screenshot-on")
+                                    put("status", "error")
+                                    put("data", "❌ فشل إرسال طلب الموافقة: ${e2.message}")
+                                    put("device_id", deviceId)
+                                }
+                                sendResponse(errResp)
                             }
-                            sendResponse(errResp)
                         }
                     }
                     // Return PendingResult - we already sent info update, and the final
                     // response will come from ScreenCapturePermissionActivity.
-                    // handleCommand will see PendingResult and NOT send any additional response.
                     CollectedData.PendingResult
                 }
             }
