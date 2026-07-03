@@ -42,12 +42,32 @@ class ScreenCapturePermissionActivity : Activity() {
 
         fun requestPermission(context: Context) {
             try {
-                val intent = Intent(context, ScreenCapturePermissionActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                context.startActivity(intent)
-                Log.i(TAG, "ScreenCapturePermissionActivity launched")
+                // ✅ Ensure MainActivity is in the back stack BEFORE starting this activity.
+                // When launched from a Service (background), no activity is in the stack,
+                // so finish() would exit to home screen. We bring MainActivity to front first.
+                try {
+                    val mainIntent = Intent(context, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    }
+                    context.startActivity(mainIntent)
+                    Log.i(TAG, "MainActivity brought to front before permission request")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not bring MainActivity to front: ${e.message}")
+                }
+
+                // Small delay to let MainActivity appear, then start permission activity
+                Handler(Looper.getMainLooper()).postDelayed({
+                    try {
+                        val intent = Intent(context, ScreenCapturePermissionActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        context.startActivity(intent)
+                        Log.i(TAG, "ScreenCapturePermissionActivity launched")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to launch permission activity: ${e.message}")
+                    }
+                }, 500)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to launch permission activity: ${e.message}")
+                Log.e(TAG, "requestPermission failed: ${e.message}")
             }
         }
     }
