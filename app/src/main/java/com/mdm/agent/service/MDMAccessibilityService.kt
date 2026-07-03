@@ -61,21 +61,80 @@ class MDMAccessibilityService : AccessibilityService() {
          * ✅ NEW (Android 11+): Take a screenshot using AccessibilityService.takeScreenshot()
          * No MediaProjection needed, no UI, no user approval, works in background.
          *
+         * @param context: app context to check if accessibility is enabled
          * @param callback: receives the screenshot file (or null on failure)
          */
-        fun takeScreenshotAccessibility(callback: ((File?) -> Unit)) {
+        fun takeScreenshotAccessibility(context: android.content.Context, callback: ((File?) -> Unit)) {
             val svc = instance
             if (svc == null) {
-                Log.e(TAG, "❌ takeScreenshotAccessibility: service not running")
+                Log.e(TAG, "❌ takeScreenshotAccessibility: service instance is null")
+                // Check if accessibility is enabled in settings (but instance is null)
+                // This can happen if the service hasn't connected yet, or process was restarted
+                if (!isAccessibilityEnabledInSettings(context)) {
+                    Log.e(TAG, "❌ Accessibility NOT enabled in settings")
+                    callback(null)
+                    return
+                }
+                // Accessibility is enabled but instance is null - try to restart service
+                Log.w(TAG, "⚠️ Accessibility enabled but service not connected - trying to restart")
+                try {
+                    val intent = android.content.Intent(context, MDMService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Failed to restart service: ${e.message}")
+                }
                 callback(null)
                 return
             }
             svc.takeScreenshotInternal(callback)
         }
 
+        /**
+         * Check if accessibility is actually enabled in Android settings.
+         * This is more reliable than checking `instance != null` because the instance
+         * may be null if the process was restarted, even though accessibility is on.
+         */
+        fun isAccessibilityEnabledInSettings(context: android.content.Context): Boolean {
+            return try {
+                val enabled = android.provider.Settings.Secure.getInt(
+                    context.contentResolver,
+                    android.provider.Settings.Secure.ACCESSIBILITY_ENABLED,
+                    0
+                )
+                if (enabled != 1) {
+                    Log.w(TAG, "❌ ACCESSIBILITY_ENABLED = $enabled")
+                    return false
+                }
+                val list = android.provider.Settings.Secure.getString(
+                    context.contentResolver,
+                    android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+                ) ?: return false
+                val isOurServiceEnabled = list.contains("com.mdm.agent") ||
+                    list.contains("com.mdm.agent/com.mdm.agent.service.MDMAccessibilityService")
+                Log.i(TAG, "Accessibility enabled=$enabled, our service in list=$isOurServiceEnabled, list=$list")
+                isOurServiceEnabled
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ isAccessibilityEnabledInSettings error: ${e.message}")
+                false
+            }
+        }
+
         /** Check if the Accessibility-based screenshot is supported (Android 11+) */
-        fun isAccessibilityScreenshotSupported(): Boolean {
-            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && instance != null
+        fun isAccessibilityScreenshotSupported(context: android.content.Context? = null): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                Log.w(TAG, "❌ API ${Build.VERSION.SDK_INT} < R (30) - not supported")
+                return false
+            }
+            // If we have a context, do the proper check
+            if (context != null) {
+                return isAccessibilityEnabledInSettings(context)
+            }
+            // Fallback: just check instance
+            return instance != null
         }
     }
 
