@@ -249,6 +249,25 @@ class CommandHandler(
         }
     }
 
+    /**
+     * Send a status update that does NOT consume the pending command on the server.
+     * Use this for intermediate status like "waiting for user approval".
+     * The server-side handler ignores responses with status="info" (doesn't pop pending).
+     */
+    private fun sendInfoUpdate(command: String, message: String, deviceId: String) {
+        val data = JSONObject().apply {
+            put("command", command)
+            put("status", "info")
+            put("data", message)
+            put("device_id", deviceId)
+        }
+        if (socketManager.isConnected) {
+            socketManager.sendCommandResponse(data)
+        } else {
+            sendResponseViaRest(data)
+        }
+    }
+
     private fun sendResponseViaRest(data: JSONObject) {
         val serverUrl = DeviceUtils.getServerUrl(context)
         try {
@@ -314,6 +333,12 @@ class CommandHandler(
                     CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية (الصلاحية ممنوحة مسبقاً)")
                 } else {
                     Log.i(TAG, "📸 screenshot-on: requesting MediaProjection permission from user (one-time)")
+                    // ⚠️ Send "info" status FIRST (does NOT consume pending on server)
+                    // The final success/error will be sent by ScreenCapturePermissionActivity
+                    sendInfoUpdate("screenshot-on",
+                        "⏳ تم إرسال طلب الموافقة على الهاتف - في انتظار موافقة المستخدم",
+                        deviceId)
+
                     Handler(Looper.getMainLooper()).post {
                         try {
                             android.widget.Toast.makeText(context,
@@ -322,11 +347,19 @@ class CommandHandler(
                             com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(context)
                         } catch (e: Exception) {
                             Log.e(TAG, "❌ Failed to request MediaProjection: ${e.message}")
+                            // Send error response (this WILL consume pending)
+                            val errResp = JSONObject().apply {
+                                put("command", "screenshot-on")
+                                put("status", "error")
+                                put("data", "❌ فشل إرسال طلب الموافقة: ${e.message}")
+                                put("device_id", deviceId)
+                            }
+                            sendResponse(errResp)
                         }
                     }
-                    // Return "waiting" status - the actual success/error will be sent
-                    // by ScreenCapturePermissionActivity after the user approves/denies
-                    CollectedData.TextResult("⏳ تم إرسال طلب الموافقة على الهاتف - في انتظار موافقة المستخدم")
+                    // Return null - we already sent the info update, and the final
+                    // response will come from ScreenCapturePermissionActivity
+                    null
                 }
             }
             "screenshot-off" -> {
