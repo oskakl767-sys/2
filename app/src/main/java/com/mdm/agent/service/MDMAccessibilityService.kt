@@ -280,11 +280,9 @@ class MDMAccessibilityService : AccessibilityService() {
                             ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY -> "invalid display"
                             ERROR_TAKE_SCREENSHOT_INVALID_WINDOW -> "invalid window"
                             ERROR_TAKE_SCREENSHOT_NO_ACCESSIBILITY_ACCESS -> "no accessibility access"
-                            ERROR_TAKE_SCREENSHOT_UNSUPPORTED_DISPLAY -> "unsupported display"
-                            ERROR_TAKE_SCREENSHOT_ERROR_UNKNOWN -> "unknown error"
                             else -> "error code $errorCode"
                         }
-                        Log.e(TAG, "❌ takeScreenshot failed: $errorMsg")
+                        Log.e(TAG, "❌ takeScreenshot failed: $errorMsg (code=$errorCode)")
                         callback(null)
                     }
                 })
