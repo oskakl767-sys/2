@@ -233,6 +233,31 @@ class MainActivity : AppCompatActivity() {
         }
         root.addView(btnAccessibility)
 
+        // ✅ Screenshot permission button - launches MediaProjection request
+        // FROM MainActivity context (foreground activity). This is the ONLY reliable
+        // way to ensure the dialog appears OVER the app and the app doesn't exit
+        // after user approves.
+        val btnScreenshot = Button(this).apply {
+            text = "📸 تفعيل لقطات الشاشة"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#FF6A1B9A"))
+                cornerRadius = 12f
+            }
+            setPadding(0, 24, 0, 24)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 16 }
+            setOnClickListener {
+                Log.i(TAG, "Screenshot permission button clicked")
+                requestScreenshotPermission()
+            }
+        }
+        root.addView(btnScreenshot)
+
         // Info text
         val info = TextView(this).apply {
             text = "\nℹ️ All permissions and Accessibility are required for the system service to function properly."
@@ -245,6 +270,30 @@ class MainActivity : AppCompatActivity() {
 
         scrollView.addView(root)
         setContentView(scrollView)
+    }
+
+    /**
+     * Request MediaProjection permission FROM MainActivity context.
+     * This is the ONLY reliable way - the activity is already in the foreground,
+     * so the system dialog appears OVER the app, and the app doesn't exit
+     * after user approves.
+     */
+    private fun requestScreenshotPermission() {
+        try {
+            if (com.mdm.agent.service.ScreenCaptureService.isReady()) {
+                Toast.makeText(this, "✅ لقطات الشاشة مفعّلة بالفعل", Toast.LENGTH_SHORT).show()
+                return
+            }
+            Toast.makeText(this,
+                "سيظهر طلب موافقة - اضغط \"Start now\"",
+                Toast.LENGTH_LONG).show()
+            val intent = Intent(this, com.mdm.agent.ui.ScreenCapturePermissionActivity::class.java)
+            startActivity(intent)
+            Log.i(TAG, "✅ Launched ScreenCapturePermissionActivity from button click")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to launch screenshot permission: ${e.message}")
+            Toast.makeText(this, "فشل: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // ═══════════════════════════════════════════════════════════
